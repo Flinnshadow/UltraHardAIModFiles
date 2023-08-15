@@ -353,7 +353,7 @@ AllTypesOfDevicesAndWeapons = {
 	Log("r")
 	for i=0,count-1 do
 		local id = GetWeaponIdSide(2, i)
-		local savename = GetDeviceType(id)
+		local savename = pe(id)
 		local cost = GetWeaponFireCost(id)
 		Log('[\"'..savename..'\"] = Value('..cost.metal..","..cost.energy..")")
 	end
@@ -745,12 +745,12 @@ function FindPriorityTarget(weaponId, type, _, needLineOfSight, needLineToStruct
 	for k=1,#priorities[type] do
 		if priorities[type][k][2] < 0 then continue end -- don't cast ray if direct hit has negative priority
 		if MaxPriority > priorities[type][k][2] and MaxPriority > priorities[type][k][3] then break end
-		for key, target in pairs(data.DevicesOnEnemyTeam[priorities[type][k][1]]) do
+		for key, targetId in pairs(data.DevicesOnEnemyTeam[priorities[type][k][1]]) do
 			-- Get obstructed w priorities[WeaponTable.saveName][k][2] and priorities[WeaponTable.saveName][k][3]
 			-- Max Priority = obs return 1
 			-- Target - obs return 2
-			local targetPos = GetDeviceCentrePosition(target)
-         local targetType = GetDeviceType(id)
+			local targetPos = GetDeviceCentrePosition(targetId)
+         local targetType = GetDeviceType(targetId)
          if data.GroundDevices[targetType] then
             targetPos = Vec3(targetPos.x, targetPos.y + data.GroundDevices[targetType], targetPos.z)
             if ShowObstructionRays then SpawnCircle(targetPos, 10, Blue(92), 5) end
@@ -758,7 +758,7 @@ function FindPriorityTarget(weaponId, type, _, needLineOfSight, needLineToStruct
 			local targetPriority = 0
 			-- IsTargetObstructed(<weaponId>, <type>, <position of target>, <hitpoints>)
 			-- dmgDealt is 100% - HP left of target after hitting (only relevant when splash damage is dealt)
-			local targetObstructed, dmgDealt = IsTargetObstructed(weaponId, type, targetPos, hitpoints,needLineOfSight,needLineToStructure, target)
+			local targetObstructed, dmgDealt = IsTargetObstructed(weaponId, type, targetPos, hitpoints,needLineOfSight,needLineToStructure, targetId)
 			
 			if not targetObstructed then
 				if dmgDealt then
@@ -768,7 +768,7 @@ function FindPriorityTarget(weaponId, type, _, needLineOfSight, needLineToStruct
 				end
 				if MaxPriority < targetPriority then
                SpawnCircle(targetPos, 50, Colour(255,255,255,255), 3)
-               Log("New Target"..target)
+               Log("New Target"..targetId)
                BetterLog(data.DevicesOnEnemyTeam[priorities[type][k][1]])
 					MaxPriority = targetPriority
 					bestTarget = targetPos
