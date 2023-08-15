@@ -86,19 +86,19 @@ data.ConstructionPeriodMean = 2
 data.ConstructionPeriodMin = 1
 data.NoConstructionPauseFactor = 1.1
 data.OffensivePhase = 1
-data.AntiAirPeriod = 0.4
+data.AntiAirPeriod = 0.1-- 0.4
 data.AntiAirMinTimeToImpact = 1.8
 data.AntiAirReactionTimeMin = 0
-data.AntiAirReactionTimeMax = 0.1
+data.AntiAirReactionTimeMax = 0.05
 data.DoorCloseDelayMin = 0
--- data.DoorCloseDelayMax = 0.1
-data.DoorCloseDelayMax = 6
+data.DoorCloseDelayMax = 0.05
+--data.DoorCloseDelayMax = 6
 data.NoTargetCloseDoorDelay = 0.1
 data.GroupDoorOpenDelay = 0.1
 data.MissileDoorFireDelay = 0.1
 data.RepairPeriod = 1
 data.ReplaceDeviceDelayMin = 0
-data.ReplaceDeviceDelayMax = 0.1
+data.ReplaceDeviceDelayMax = 0.05
 data.MissileAimingDelay = 0
 data.FireStdDevDefault = 0
 data.DisableFrustration = true
@@ -772,9 +772,6 @@ function FindPriorityTarget(weaponId, type, _, needLineOfSight, needLineToStruct
 					targetPriority = priorities[type][k][2]
 				end
 				if MaxPriority < targetPriority then
-               SpawnCircle(targetPos, 50, Colour(255,255,255,255), 3)
-               Log("New Target"..targetId)
-               BetterLog(data.DevicesOnEnemyTeam[priorities[type][k][1]])
 					MaxPriority = targetPriority
 					bestTarget = targetPos
 				end
@@ -847,8 +844,8 @@ function IsTargetObstructed(weaponId, weaponType, pos, hitpoints,needLineOfSight
 
 	-- vector in direction of where weapon shoots
 	local firingDirection = Vec3()
-	firingDirection.x = math.cos(delta) * 250
-	firingDirection.y = -math.sin(delta) * 250
+	firingDirection.x = math.cos(delta) * 500
+	firingDirection.y = -math.sin(delta) * 500
 	local aimDirection = hardPointPos + firingDirection
 
 	-- check if next 5 tiles inn that direction are free
@@ -867,23 +864,24 @@ function IsTargetObstructed(weaponId, weaponType, pos, hitpoints,needLineOfSight
 			-- mirror fire angle to get the incoming angle at the target
 			-- there will be error due to drag and change in elevation
 			local angle = GetAimWeaponAngle()
+         BetterLog(angle)
 			angle = math.pi - angle
 			local testPos = Vec3()
 			testPos.x = pos.x + 1000*math.cos(angle)
 			testPos.y = pos.y - 1000*math.sin(angle)
 			if CastGroundRay(pos, testPos, TERRAIN_PROJECTILE) == RAY_HIT_TERRAIN then
-				LogDetail("  Target obstructed by terrain")
+				LogLower("  Target obstructed by terrain 1")
 				return true
 			end
 		else
-			LogDetail("  No firing solution")
+			LogLower("  No firing solution 1")
 			return true
 		end
 	end
 
 	if not needLineOfSight and not needLineToStructure then
 		if ShowObstructionRays then SpawnCircle(hardPointPos, 150, Colour(255,255,255,255), 5) end
-		return false, 0
+		return false, false
 	else
 		
 		if ShowObstructionRays then rayFlags = rayFlags | RAY_DEBUG end
@@ -956,7 +954,7 @@ function CastTargetObstructionRayNew(source, target, hitpoints, rayFlags, weapon
 			end
 		elseif not (teamHit == teamId and GetRayHitDoor()) then -- ignore friendly doors
 			if hitSaveName ~= "backbracing" or (data.HitsBackground[weaponType]) then -- ignore backbracing unless buzz or howie
-				if (teamHit%MAX_SIDES == teamId) then return data.RAY_HIT_OBSTRUCTED, 0 end -- projectile path collides with friendly entity			
+				if (teamHit%MAX_SIDES == teamId%MAX_SIDES) then return data.RAY_HIT_OBSTRUCTED, 0 end -- projectile path collides with friendly entity			
 				-- ray hits (enemy or) structure/device if code makes it to here
 				if data.StructureHPList[hitSaveName] ~= nil then
 					-- known material
@@ -981,7 +979,6 @@ function CastTargetObstructionRayNew(source, target, hitpoints, rayFlags, weapon
 					end
 	--					Log(" - " .. nodeIdA .. " " ..nodeIdB .. ", projectileHP: " .. projectileHP .. ", linkHealth " .. GetLinkHealth(nodeIdA, nodeIdB))
 				else
-               Log(""..hitSaveName)
 					-- unknown material, likely modded (or shield)
 				end
 			end
