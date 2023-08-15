@@ -559,7 +559,7 @@ end]]
 
 
 function OnDeviceTeamUpdated(oldTeamId, newTeamId, deviceId, saveName) -- This is run before game start due to structures not actually owning/parenting ground devices, use GameStarted to ignore these calls
-   if not GameStarted then Log("ignoring device due to being called before Load: "..saveName) return end
+   if not GameStarted then return end
 	--Log(saveName.." "..deviceId.." Old: "..oldTeamId.." New: "..newTeamId)
    --Log("TeamId "..teamId.."enemy"..enemyTeamId)
 	if newTeamId%100 == enemyTeamId then
@@ -864,17 +864,14 @@ function IsTargetObstructed(weaponId, weaponType, pos, hitpoints,needLineOfSight
 			-- mirror fire angle to get the incoming angle at the target
 			-- there will be error due to drag and change in elevation
 			local angle = GetAimWeaponAngle()
-         BetterLog(angle)
 			angle = math.pi - angle
 			local testPos = Vec3()
 			testPos.x = pos.x + 1000*math.cos(angle)
 			testPos.y = pos.y - 1000*math.sin(angle)
 			if CastGroundRay(pos, testPos, TERRAIN_PROJECTILE) == RAY_HIT_TERRAIN then
-				LogLower("  Target obstructed by terrain 1")
 				return true
 			end
 		else
-			LogLower("  No firing solution 1")
 			return true
 		end
 	end
