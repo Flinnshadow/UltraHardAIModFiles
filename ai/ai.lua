@@ -286,7 +286,7 @@ data.StructureHPList = {bracing = 150, backbracing = 100, armour = 400, door = 4
 -- custom RAY_HIT return types:
 data.RAY_HIT_OBSTRUCTED = 69420
 
-ShowObstructionRays = true
+ShowObstructionRays = false
 -- This is for canAfford, therefor lasers will be able to fire a bit before they are full
 WeaponFireCosts =
 {
@@ -370,7 +370,7 @@ AllTypesOfDevicesAndWeapons = {
 --end
 
 function LogLower(x)
-	BetterLog(x)
+	--BetterLog(x)
 end
 function LogMid(x)
 	BetterLog(x)
@@ -734,6 +734,7 @@ end]]
 
 function FindPriorityTarget(weaponId, type, _, needLineOfSight, needLineToStructure) -- door call can be in curr target?
 	if not priorities[type] then Log("Weapon \"" .. type .. "\" has no target priority list. Aborting fire.") return end
+	LogLower("Finding target for " .. type .. "with id " .. weaponId)
 
 	local MaxPriority = 0
 	local bestTarget = nil
@@ -763,6 +764,7 @@ function FindPriorityTarget(weaponId, type, _, needLineOfSight, needLineToStruct
 			local targetPriority = 0
 			-- IsTargetObstructed(<weaponId>, <type>, <position of target>, <hitpoints>)
 			-- dmgDealt is 100% - HP left of target after hitting (only relevant when splash damage is dealt)
+			LogLower("Target " .. targetType .. " " .. targetId .. " obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
 			local targetObstructed, dmgDealt = IsTargetObstructed(weaponId, type, targetPos, hitpoints,needLineOfSight,needLineToStructure, targetId)
 			
 			if not targetObstructed then
@@ -771,6 +773,7 @@ function FindPriorityTarget(weaponId, type, _, needLineOfSight, needLineToStruct
 				else
 					targetPriority = priorities[type][k][2]
 				end
+				LogLower("MaxPriority: " .. MaxPriority .. ", targetPriority: " .. targetPriority)
 				if MaxPriority < targetPriority then
 					MaxPriority = targetPriority
 					bestTarget = targetPos
@@ -831,7 +834,7 @@ function IsTargetObstructed(weaponId, weaponType, pos, hitpoints,needLineOfSight
 
 	if not AimWeapon(weaponId, pos) then
 		LogDetail("  No firing solution")
-		return true
+		return true, false
 	end
 	
 	local hardPointPos = GetWeaponHardpointPosition(weaponId)
@@ -849,10 +852,11 @@ function IsTargetObstructed(weaponId, weaponType, pos, hitpoints,needLineOfSight
 	local aimDirection = hardPointPos + firingDirection
 
 	-- check if next 5 tiles inn that direction are free
+	if ShowObstructionRays then rayFlags = rayFlags | RAY_DEBUG end
 	local hitType = CastTargetObstructionRayNew(hardPointPos, aimDirection, math.huge, rayFlags, weaponType, targetId, weaponId)
 	
 	if hitType == data.RAY_HIT_OBSTRUCTED then
-		return true
+		return true, false
 	end
 	-- else, can actually fire there
 
@@ -869,10 +873,10 @@ function IsTargetObstructed(weaponId, weaponType, pos, hitpoints,needLineOfSight
 			testPos.x = pos.x + 1000*math.cos(angle)
 			testPos.y = pos.y - 1000*math.sin(angle)
 			if CastGroundRay(pos, testPos, TERRAIN_PROJECTILE) == RAY_HIT_TERRAIN then
-				return true
+				return true, false
 			end
 		else
-			return true
+			return true, false
 		end
 	end
 
@@ -888,7 +892,7 @@ function IsTargetObstructed(weaponId, weaponType, pos, hitpoints,needLineOfSight
 
 		hitType, dmgDealt = CastTargetObstructionRayNew(hardPointPos, pos, hitpoints, rayFlags, weaponType, targetId, weaponId)
 
-		if hitType == data.RAY_HIT_OBSTRUCTED then return true end -- target obstructed/cannot be reached (projectileHP < 0)
+		if hitType == data.RAY_HIT_OBSTRUCTED then return true, false end -- target obstructed/cannot be reached (projectileHP < 0)
 
 		LogEnum("cast ray " .. RAY_HIT[hitType] .. " team " .. GetRayHitSideId())
 		if needLineOfSight then
@@ -902,7 +906,7 @@ function IsTargetObstructed(weaponId, weaponType, pos, hitpoints,needLineOfSight
 			end
 		end
 	end
-	return true
+	return true, false
 end
 
 function comparePositions(pos1, pos2)
@@ -917,18 +921,20 @@ end
 function CastTargetObstructionRayNew(source, target, hitpoints, rayFlags, weaponType, targetId, weaponId)
 	local hitType
 	local hitSaveName
-   local teamHit
+   	local teamHit
 	local projectileHP = hitpoints
+	LogLower("Start of ray casting, projectileHP " .. projectileHP)
 	-- offset new ray starting position of ray every loop
 	local rayVec = target - source
 	local length = math.sqrt(rayVec.x^2 + rayVec.y^2)
 	-- nrmVec is basically the offset vector to prevent the ray from hitting the same thing twice
-	local nrmVec = Vec3(0.1,0.1) -- This should be enough to not cause multiple overlapping struts to be not counted, could be lower but I have had issues with floating point errors
-	nrmVec.x = rayVec.x / length
-	nrmVec.y = rayVec.y / length
+	local nrmVec = Vec3() -- This should be enough to not cause multiple overlapping struts to be not counted, could be lower but I have had issues with floating point errors
+	nrmVec.x = rayVec.x / length * 0.01
+	nrmVec.y = rayVec.y / length * 0.01
 	nrmVec.z = rayVec.z
 	
 	local hits = {}
+	local frustration = 3
 	-- have to offset ray by a bit every time, because CastRay ray collides with literally everything, including friendly doors and background
 	repeat
 		hitType = CastRay(source, target, rayFlags, 0)
@@ -937,21 +943,25 @@ function CastTargetObstructionRayNew(source, target, hitpoints, rayFlags, weapon
 
 		local hitPos = GetRayHitPosition()
 		if hits[hitPos.x .. " " .. hitPos.y] == true then
+			frustration = frustration - 1
+			if frustration < 0 then break end
 			-- AI would get stuck in infinite loop
-			break
 		end
 		hits[hitPos.x .. " " .. hitPos.y] = true
 		source = hitPos + nrmVec
 		hitSaveName = GetRayHitMaterialSaveName()
 		teamHit = GetRayHitTeamId()
+	
 		if hitType == RAY_HIT_DEVICE then
 			local deviceId = GetRayHitDeviceId()
 			if deviceId ~= targetId and deviceId ~= weaponId and not (weaponType == "minigun" and GetDeviceType(deviceId) == "sandbags") then
+				LogLower("Ray hit " .. GetDeviceType(deviceId))
 				projectileHP = projectileHP - GetDeviceHitpoints(deviceId)
 			end
 		elseif not (teamHit == teamId and GetRayHitDoor()) then -- ignore friendly doors
 			if hitSaveName ~= "backbracing" or (data.HitsBackground[weaponType]) then -- ignore backbracing unless buzz or howie
-				if (teamHit%MAX_SIDES == teamId%MAX_SIDES) then return data.RAY_HIT_OBSTRUCTED, 0 end -- projectile path collides with friendly entity			
+				if (teamHit%MAX_SIDES == teamId%MAX_SIDES) then return data.RAY_HIT_OBSTRUCTED, 0 end -- projectile path collides with friendly entity	
+				LogLower("Ray hit " .. hitSaveName .. ", projectileHP: " .. projectileHP)		
 				-- ray hits (enemy or) structure/device if code makes it to here
 				if data.StructureHPList[hitSaveName] ~= nil then
 					-- known material
@@ -960,7 +970,7 @@ function CastTargetObstructionRayNew(source, target, hitpoints, rayFlags, weapon
 
 					--Log("weaponType: " .. weaponType .. ", isInShieldExclusions: " .. tostring(data.ShieldExclusions[weaponType]) .. ", hitpoints: " .. hitpoints)
 							
-					if hitSaveName == "armour" or (hitSaveName == "door" and data.OpenDoors[nodeIdA .. " " .. nodeIdB] ~= true) and data.MetalExclusions[weaponType] then return data.RAY_HIT_OBSTRUCTED, 0 end
+					if (hitSaveName == "armour" or (hitSaveName == "door" and data.OpenDoors[nodeIdA .. " " .. nodeIdB] ~= true)) and data.MetalExclusions[weaponType] then return data.RAY_HIT_OBSTRUCTED, 0 end
 					if hitSaveName == "shield" and data.ShieldExclusions[weaponType] then return data.RAY_HIT_OBSTRUCTED, 0 end
 					
 					if (nodeIdA > 0 and nodeIdB > 0) then
@@ -1037,6 +1047,7 @@ function TargetObstructed(weaponId, weaponType, pos, hitpoints, needLineOfSight,
 	local aimDirection = hardPointPos + firingDirection
 
 	-- check if next 5 tiles inn that direction are free
+	if ShowObstructionRays then rayFlags = rayFlags | RAY_DEBUG end
 	local hitType = CastTargetObstructionRay(hardPointPos, aimDirection, math.huge, rayFlags, weaponType)
 	
 	if hitType == data.RAY_HIT_OBSTRUCTED then
@@ -1071,7 +1082,6 @@ function TargetObstructed(weaponId, weaponType, pos, hitpoints, needLineOfSight,
 		return false
 	else
 		
-		if ShowObstructionRays then rayFlags = rayFlags | RAY_DEBUG end
 
 --		local hitType = CastRayFromDevice(weaponId, pos, hitpoints, rayFlags, 0)
 --		Log("Casting ray from " .. weaponType .. ", teamId: " .. teamId .. " to " .. GetDeviceType(GetDeviceIdAtPosition(pos)) .. ", pos: " .. pos)
