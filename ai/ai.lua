@@ -248,6 +248,7 @@ data.AntiAirLateralStdDev =
 }]]
 -- make snipers fire more often
 data.OffensiveFireProbability["sniper"] = 1
+data.OffensiveFireProbability["machinegun"] = 0
 
 
 for k, v in pairs(FireErrorStdDev) do
@@ -281,7 +282,7 @@ data.RepairDamageThresholdNormal = 1
 data.RepairDamageThresholdRebuilding = 1
 
 -- structure HP lookup table
-data.StructureHPList = {bracing = 150, backbracing = 100, armour = 400, door = 400, shield = 1000}
+data.StructureHPList = {bracing = 150, backbracing = 100, armour = 400, door = 400, shield = 1000, rope = 50}
 
 -- custom RAY_HIT return types:
 data.RAY_HIT_OBSTRUCTED = 69420
@@ -764,8 +765,10 @@ function FindPriorityTarget(weaponId, type, _, needLineOfSight, needLineToStruct
 			local targetPriority = 0
 			-- IsTargetObstructed(<weaponId>, <type>, <position of target>, <hitpoints>)
 			-- dmgDealt is 100% - HP left of target after hitting (only relevant when splash damage is dealt)
-			LogLower("Target " .. targetType .. " " .. targetId .. " obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
+
+			LogLower("Checking target " .. targetType .. " " .. targetId)
 			local targetObstructed, dmgDealt = IsTargetObstructed(weaponId, type, targetPos, hitpoints,needLineOfSight,needLineToStructure, targetId)
+			LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
 			
 			if not targetObstructed then
 				if dmgDealt then
@@ -816,7 +819,7 @@ end
 -- boolean splashRequired to hit
 -- float dmgDealt if splashRequired (formula: 1 - distanceToTarget/SplashRadius)
 function IsTargetObstructed(weaponId, weaponType, pos, hitpoints,needLineOfSight,needLineToStructure, targetId)
-	--Log("weaponId: " .. weaponId .. ", weaponType: " .. weaponType .. ", line of sight: " .. tostring(needLineOfSight) .. ", line to structure: " .. tostring(needLineToStructure))
+	LogLower("weaponId: " .. weaponId .. ", weaponType: " .. weaponType .. ", line of sight: " .. tostring(needLineOfSight) .. ", line to structure: " .. tostring(needLineToStructure))
 	
 	
 	-- Ray casting fix by @cronkhinator (Discord ID: 165842061055098880)
@@ -833,7 +836,7 @@ function IsTargetObstructed(weaponId, weaponType, pos, hitpoints,needLineOfSight
 	-- first check if angle to shoot is blocked by friendly structure:
 
 	if not AimWeapon(weaponId, pos) then
-		LogDetail("  No firing solution")
+		LogLower("  No firing solution")
 		return true, false
 	end
 	
@@ -856,6 +859,7 @@ function IsTargetObstructed(weaponId, weaponType, pos, hitpoints,needLineOfSight
 	local hitType = CastTargetObstructionRayNew(hardPointPos, aimDirection, math.huge, rayFlags, weaponType, targetId, weaponId)
 	
 	if hitType == data.RAY_HIT_OBSTRUCTED then
+		LogLower("firing direction obstructed")
 		return true, false
 	end
 	-- else, can actually fire there
@@ -865,17 +869,22 @@ function IsTargetObstructed(weaponId, weaponType, pos, hitpoints,needLineOfSight
 		-- Log("Lobbed")
 		-- cast a ray back from the target to avoid terrain
 		if AimWeapon(weaponId, pos) then
-			-- mirror fire angle to get the incoming angle at the target
-			-- there will be error due to drag and change in elevation
-			local angle = GetAimWeaponAngle()
-			angle = math.pi - angle
+			local firingAngle = GetAimWeaponAngle()
+			heightDifference = hardPointPos.y - pos.y --y axis facing downwards
+			horizontalDistance = pos.x - hardPointPos.x
+			angleOfImpact = math.atan(heightDifference / horizontalDistance)
+			angleOfImpact = 2*angleOfImpact + (math.pi - firingAngle)
+
 			local testPos = Vec3()
-			testPos.x = pos.x + 1000*math.cos(angle)
-			testPos.y = pos.y - 1000*math.sin(angle)
+			testPos.x = pos.x + 1000*math.cos(angleOfImpact)
+			testPos.y = pos.y - 1000*math.sin(angleOfImpact)
+			SpawnLine(pos, testPos, Colour(0, 255, 0, 255), 5)
 			if CastGroundRay(pos, testPos, TERRAIN_PROJECTILE) == RAY_HIT_TERRAIN then
+				LogLower("(Lobbed Projectile) ground ray hit terrain")
 				return true, false
 			end
 		else
+			LogLower("(Lobbed Projectile) no firing solution")
 			return true, false
 		end
 	end
@@ -923,7 +932,7 @@ function CastTargetObstructionRayNew(source, target, hitpoints, rayFlags, weapon
 	local hitSaveName
    	local teamHit
 	local projectileHP = hitpoints
-	LogLower("Start of ray casting, projectileHP " .. projectileHP)
+	--LogLower("Start of ray casting, projectileHP " .. projectileHP)
 	-- offset new ray starting position of ray every loop
 	local rayVec = target - source
 	local length = math.sqrt(rayVec.x^2 + rayVec.y^2)
@@ -955,13 +964,13 @@ function CastTargetObstructionRayNew(source, target, hitpoints, rayFlags, weapon
 		if hitType == RAY_HIT_DEVICE then
 			local deviceId = GetRayHitDeviceId()
 			if deviceId ~= targetId and deviceId ~= weaponId and not (weaponType == "minigun" and GetDeviceType(deviceId) == "sandbags") then
-				LogLower("Ray hit " .. GetDeviceType(deviceId))
+				--LogLower("Ray hit " .. GetDeviceType(deviceId))
 				projectileHP = projectileHP - GetDeviceHitpoints(deviceId)
 			end
 		elseif not (teamHit == teamId and GetRayHitDoor()) then -- ignore friendly doors
-			if hitSaveName ~= "backbracing" or (data.HitsBackground[weaponType]) then -- ignore backbracing unless buzz or howie
+			if hitSaveName ~= "backbracing" and hitSaveName ~= "rope" or (data.HitsBackground[weaponType]) then -- ignore backbracing unless buzz or howie
 				if (teamHit%MAX_SIDES == teamId%MAX_SIDES) then return data.RAY_HIT_OBSTRUCTED, 0 end -- projectile path collides with friendly entity	
-				LogLower("Ray hit " .. hitSaveName .. ", projectileHP: " .. projectileHP)		
+				--LogLower("Ray hit " .. hitSaveName .. ", projectileHP: " .. projectileHP)		
 				-- ray hits (enemy or) structure/device if code makes it to here
 				if data.StructureHPList[hitSaveName] ~= nil then
 					-- known material
@@ -1798,7 +1807,7 @@ priorities = {
    -- {"savename", 0.1, 0} for every savename in AllTypesOfDevicesAndWeapons, is implicitly given in every table unless specified otherwise
    -- (-1,_) counts as disabled, (0,-1) will automaticly remove splash calculation from the weapon (if its 0 it will still count as valid, but have 0 priority.)
    ["machinegun"] = {
-      {"machinegun", 100,-1},
+      --{"machinegun", 100,-1},
    },
 
    ["minigun"] = {
