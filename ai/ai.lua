@@ -878,7 +878,7 @@ function IsTargetObstructed(weaponId, weaponType, pos, hitpoints,needLineOfSight
 			local testPos = Vec3()
 			testPos.x = pos.x + 1000*math.cos(angleOfImpact)
 			testPos.y = pos.y - 1000*math.sin(angleOfImpact)
-			SpawnLine(pos, testPos, Colour(0, 255, 0, 255), 5)
+			if ShowObstructionRays then SpawnLine(pos, testPos, Colour(0, 255, 0, 255), 5) end
 			if CastGroundRay(pos, testPos, TERRAIN_PROJECTILE) == RAY_HIT_TERRAIN then
 				LogLower("(Lobbed Projectile) ground ray hit terrain")
 				return true, false
