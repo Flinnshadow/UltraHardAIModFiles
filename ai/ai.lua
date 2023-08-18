@@ -1632,7 +1632,7 @@ function CastTargetObstructionRayNew(source, target, hitpoints, rayFlags, weapon
            projectileHP = projectileHP - GetDeviceHitpoints(deviceId)
         end
      elseif not (teamHit == teamId and GetRayHitDoor()) then -- ignore friendly doors
-        if hitSaveName ~= "backbracing" and hitSaveName ~= "rope" or (data.HitsBackground[weaponType]) then -- ignore backbracing unless buzz or howie
+        if hitSaveName ~= "backbracing" and hitSaveName ~= "rope" or (data.HitsBackground[weaponType] and teamHit ~= teamId) then -- ignore backbracing unless buzz or howie
            if (teamHit%MAX_SIDES == teamId%MAX_SIDES) then return data.RAY_HIT_OBSTRUCTED, 0 end -- projectile path collides with friendly entity	
            --LogLower("Ray hit " .. hitSaveName .. ", projectileHP: " .. projectileHP)		
            -- ray hits (enemy or) structure/device if code makes it to here
