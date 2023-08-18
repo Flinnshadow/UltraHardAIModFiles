@@ -908,6 +908,32 @@ function TryShootDownProjectiles()
 	ScheduleCall(data.AntiAirPeriod, TryShootDownProjectiles)
 end
 
+function OnWeaponFired(weaponTeamId, saveName, weaponId, projectileNodeId, projectileNodeIdFrom)
+	if data.gameWinner and data.gameWinner ~= teamId then return end
+
+	if weaponTeamId%MAX_SIDES == enemyTeamId then
+		local projectileSaveName = GetNodeProjectileSaveName(projectileNodeId)
+
+		if ShootableProjectile[projectileSaveName] then
+		   TrackProjectile(projectileNodeId)
+		end
+	end
+
+	--[[if data.BuildIntoSmoke then
+		local projType = GetNodeProjectileSaveName(projectileNodeId)
+		if Fort and projType == "smoke" then
+			ScheduleCall(0.5, BuildIntoSmoke, projectileNodeId, 4)
+		end
+	end]]
+end
+
+function TrackProjectile(nodeId)
+	--local nodeTeamId = NodeTeam(nodeId) -- returns TEAM_ANY if non-existent
+	--if nodeTeamId%MAX_SIDES == enemyTeamId then -- node may have changed team since firing
+		table.insert(data.TrackedProjectiles, { ProjectileNodeId = nodeId, AntiAirWeapons = {}, Claims = {} })
+	--end
+end
+
 -------------------------------------------------------
 -- BEGIN fixes by @alexd26 (Discord ID:526090170521616384) --
 -------------------------------------------------------
