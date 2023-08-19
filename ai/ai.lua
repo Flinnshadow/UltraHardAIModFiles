@@ -77,7 +77,7 @@ function BetterLog(v)
 end
 offensivePhase = true -- The difficulty is always enough to enable this
 data.UpdatePeriod = 0.2
-data.UpdateAfterRebuildDelay = 0.1
+data.UpdateAfterRebuildDelay = 0.05
 data.NonConstructionPeriodStdDev = 1
 data.NonConstructionPeriodMean = 1
 data.NonConstructionPeriodMin = 1
@@ -844,12 +844,12 @@ function TryShootDownProjectiles()
 						end
 						
 						if not blocked then
-							local projSaveName = GetWeaponSelectedAmmo(id)
-							local projParams = GetProjectileParams(projSaveName, teamId)
+							--local projSaveName = GetWeaponSelectedAmmo(id)
+							--local projParams = GetProjectileParams(projSaveName, teamId)
 
-							if hasbit(projParams.FieldType, FIELD2_DECOY_ENEMY_BIT) then
+							--[[if hasbit(projParams.FieldType, FIELD2_DECOY_ENEMY_BIT) then
 								pos = AimDecoyAtEnemy(pos, id, projParams, fieldBlockFlags)
-							end
+							end]]
 
 							local stdDev = data.AntiAirErrorStdDev[type]
 							--LogDetail("Shooting down projectile " .. v.ProjectileNodeId .. " weapon " .. id)
@@ -864,7 +864,7 @@ function TryShootDownProjectiles()
 								end
 								InsertUnique(v.AntiAirWeapons, id)
 								data.NextAntiAirIndex = index + 1
-								
+
 								--if IsSlowFiringAntiAir(id) then
 									local timeRemaining = GetWeaponFiringTimeRemaining(id)
 									TryCloseWeaponDoorsWithDelay(id, "slow firing AA ", timeRemaining)
@@ -873,7 +873,7 @@ function TryShootDownProjectiles()
 								-- give a chance to keep firing anti-air weapons
                         if type == "machinegun" then
                            if GetRandomFloat(0, 100, "TryShootDownProjectiles Persist " .. id) < 40 then
-                              break 
+                              break
                            end
 								elseif GetRandomFloat(0, 100, "TryShootDownProjectiles Persist " .. id) < 90 then -- was 50
 									break
@@ -933,7 +933,6 @@ function TrackProjectile(nodeId)
 		table.insert(data.TrackedProjectiles, { ProjectileNodeId = nodeId, AntiAirWeapons = {}, Claims = {} })
 	--end
 end
-
 -------------------------------------------------------
 -- BEGIN fixes by @alexd26 (Discord ID:526090170521616384) --
 -------------------------------------------------------
@@ -947,7 +946,7 @@ data.StructureHPList = {bracing = 150, backbracing = 100, armour = 400, door = 4
 -- custom RAY_HIT return types:
 data.RAY_HIT_OBSTRUCTED = 69420
 
-ShowObstructionRays = true
+ShowObstructionRays = false
 -- This is for canAfford, therefor lasers will be able to fire a bit before they are full
 WeaponFireCosts =
 {
@@ -1429,15 +1428,17 @@ function FindPriorityTarget(weaponId, type, _, needLineOfSight, needLineToStruct
   local MaxPriority = 0
   local bestTarget = nil
   local hitpoints = data.ProjectileHitpoints[type]
-
-  local ignoreProtectionProb = data.IgnoreProtectionProbability[type]
+  GetRandomFloat(0, 1, "FindPriorityTarget IP " .. weaponId)
+  --if random 
+  --data.WeaponFireTypeProbabilities
+  --local ignoreProtectionProb = data.IgnoreProtectionProbability[type]
   --apple = RandomFloat%0.000001*1000000+0.01
   --Log("Better Roll "..apple)
-  if ignoreProtectionProb ~= nil and GetRandomFloat(0, 1, "FindPriorityTarget IP " .. weaponId) <= ignoreProtectionProb then
+  --[[if ignoreProtectionProb ~= nil and GetRandomFloat(0, 1, "FindPriorityTarget IP " .. weaponId) <= ignoreProtectionProb then
      LogLower("  Ignoring protection")
      SpawnCircle(GetDeviceCentrePosition(weaponId), 30, Blue(), 2)
      hitpoints = 100000000
-  end
+  end]]
 
   for k=1,#priorities[type] do
      if priorities[type][k][2] < 0 then continue end -- don't cast ray if direct hit has negative priority
@@ -1658,7 +1659,7 @@ function CastTargetObstructionRayNew(source, target, hitpoints, rayFlags, weapon
            projectileHP = projectileHP - GetDeviceHitpoints(deviceId)
         end
      elseif not (teamHit == teamId and GetRayHitDoor()) then -- ignore friendly doors
-        if hitSaveName ~= "backbracing" and hitSaveName ~= "rope" or (data.HitsBackground[weaponType] and teamHit%MAX_SIDES ~= teamId%MAX_SIDES) then -- ignore backbracing unless buzz or howie
+         if hitSaveName ~= "backbracing" and hitSaveName ~= "rope" or (data.HitsBackground[weaponType] and teamHit%MAX_SIDES ~= teamId%MAX_SIDES) then -- ignore backbracing unless buzz or howie
            if (teamHit%MAX_SIDES == teamId%MAX_SIDES) then return data.RAY_HIT_OBSTRUCTED, 0 end -- projectile path collides with friendly entity	
            --LogLower("Ray hit " .. hitSaveName .. ", projectileHP: " .. projectileHP)		
            -- ray hits (enemy or) structure/device if code makes it to here
@@ -2465,7 +2466,7 @@ data.WeaponFireTypeProbabilities = -- when fireing, it will roll a number, then 
       ["magnabeam"] =   0.00,--This fires at the core every time anyways
       ["smokebomb"] =   0.13,--Extra spash can mean it works on trenches, good and bad
    },
-   FireAtRandomTargetWithExtraDamageProbability = 
+   FireAtRandomTargetWithExtraDamageProbability = -- 2x damage
    {
       ["machinegun"] =  0.00,
       ["minigun"] =     0.07,
