@@ -244,6 +244,13 @@ data.CloseDoorDelay =
 	["rocketemp"] = 0.2,
 }
 
+WeaponFiresLobbedProjectile =
+{
+	["mortar2"] = true,
+	["mortar"] = true,
+	["howitzer"] = true,
+}
+
 data.IgnoreProtectionProbability["rocket"] = 0.25
 --[[data.IgnoreProtectionProbability["howitzer"] = 0.1 -- 0otherwise		TOADD TO BASE MOD
 data.AntiAirLateralStdDev =
@@ -547,7 +554,7 @@ function RemoveDeviceFromEnemySide(id,saveName)
    --Log("AI team: "..teamId.."Enemy: "..enemyTeamId.." "..Id.." "..saveName)
    --Log("Remove, Enemy: "..enemyTeamId.." "..Id.." "..saveName)
    for i=1,#data.DevicesOnEnemyTeam[saveName] do
-      if data.DevicesOnEnemyTeam[saveName][i] == id then data.DevicesOnEnemyTeam[saveName][i] = nil return end--[[table.remove(data.DevicesOnEnemyTeam,i)]]
+      if data.DevicesOnEnemyTeam[saveName][i] == id then table.remove(data.DevicesOnEnemyTeam,i) return end
    end
 end
 
@@ -889,6 +896,13 @@ function IsTargetObstructed(weaponId, weaponType, pos, hitpoints,needLineOfSight
 				LogLower("(Lobbed Projectile) ground ray hit terrain")
 				return true, false
 			end
+			-- has line of sight
+			-- shoot ray from artificial pos to target pos to check if projectile has enough hp/splash
+			hitType, dmgDealt = CastTargetObstructionRayNew(testPos, pos, hitpoints, rayFlags, weaponType, targetId, weaponId)
+
+			if hitType == data.RAY_HIT_OBSTRUCTED then return true, false end
+
+			return false, dmgDealt
 		else
 			LogLower("(Lobbed Projectile) no firing solution")
 			return true, false
@@ -2574,7 +2588,7 @@ function TryCloseWeaponDoors(id)
 	local available = IsAIDeviceAvailable(id)
 	if not spotterInUse and not missileLaunching and available then
 		local fireTime = GetWeaponFiringTimeRemaining(id)
-		Log("TryCloseWeaponDoors " .. id .. ", fireTime: " .. fireTime)
+		--Log("TryCloseWeaponDoors " .. id .. ", fireTime: " .. fireTime)
 		if fireTime < 0.1 then
 			CloseWeaponDoors(id)
 		else
