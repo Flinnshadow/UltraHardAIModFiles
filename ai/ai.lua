@@ -77,7 +77,7 @@ function BetterLog(v)
 end
 offensivePhase = true -- The difficulty is always enough to enable this
 data.UpdatePeriod = 0.2
-data.UpdateAfterRebuildDelay = 0.05
+data.UpdateAfterRebuildDelay = 0
 data.NonConstructionPeriodStdDev = 1
 data.NonConstructionPeriodMean = 1
 data.NonConstructionPeriodMin = 1
@@ -118,7 +118,6 @@ data.AntiAirLateralStdDev =
   [PROJECTILE_TYPE_MORTAR] = 6,--12, 40 
   [PROJECTILE_TYPE_MISSILE] = 3,--5, 10
 }
-
 --[[
 Log("WeaponFiresLobbedProjectile")
 BetterLog(WeaponFiresLobbedProjectile)
@@ -232,13 +231,21 @@ data.HitsBackground =
   ["buzzsaw"] = true,
 }
 
-data.IgnoreProtectionProbability["rocket"] = 0.25                    --//TODO: To be deprecated, replaced with WeaponFireTypePrio
-data.IgnoreProtectionProbability["howitzer"] = 0.1 -- 0otherwise		TOADD TO BASE MOD
-data.IgnoreProtectionProbability["shotgun"] = 0.2-- it has 160 damage, allowing it to break wood. this is good but the issue is that it will always shoot at the core when override is set.
+data.CloseDoorDelay = 
+{
+	["rocket"] = 0.2,
+	["rocketemp"] = 0.2,
+}
+
+WeaponFiresLobbedProjectile =
+{
+	["mortar2"] = true,
+	["mortar"] = true,
+	["howitzer"] = true,
+}
 
 data.OffensiveFireProbability["sniper"] = 1
 data.OffensiveFireProbability["machinegun"] = 0
-
 
 for k, v in pairs(FireErrorStdDev) do
   FireErrorStdDev[k] = 0
@@ -304,7 +311,7 @@ function UpdateAI() -- Added to remove weapon bucket variable manip
 
 	-- only shoot while construction is paused or the difficulty level is extreme
 	if --[[offensivePhase and]] not data.Disable and not data.DisableOffence then
-		--data.offenceBucket = data.offenceBucket - 1
+		data.offenceBucket = data.offenceBucket - 1
 		local weaponCount = GetWeaponCount(teamId)
 		local attemptCount = 0
 		if weaponCount > 0 then
@@ -312,11 +319,11 @@ function UpdateAI() -- Added to remove weapon bucket variable manip
 			local firstIndex = data.currWeapon
 			repeat
 				if data.currWeapon < weaponCount then
-               UpdateWeapon(data.currWeapon, not data.activeBuilding)                                                       --//Note, Removed all delay on weapon fireing, not ideal but prob not bad eithter, will cause more lag
-					--if data.offencePoints >= 1 and UpdateWeapon(data.currWeapon, not data.activeBuilding) then
-						--data.offencePoints = data.offencePoints - 1
-						--done = true
-					--end
+               --UpdateWeapon(data.currWeapon, not data.activeBuilding)                                                       --//Note, Removed all delay on weapon fireing, not ideal but prob not bad eithter, will cause more lag
+					if data.offencePoints >= 1 and UpdateWeapon(data.currWeapon, not data.activeBuilding) then
+						data.offencePoints = data.offencePoints - 1
+						done = true
+					end
 					
 					data.currWeapon = data.currWeapon + 1
 					if data.currWeapon == weaponCount then
@@ -331,11 +338,11 @@ function UpdateAI() -- Added to remove weapon bucket variable manip
 				end
 			until done
 		end
-		--[[if data.offenceBucket < 0 then
+		if data.offenceBucket < 0 then
 			data.offenceBucket = 0
 		elseif data.offenceBucket > 6 then
 			data.offenceBucket = 6
-		end]]
+		end
 		--LogEnum("Offence bucket = " .. data.offenceBucket)                                                                    //IMPORTANT, unless luac is smart, each LogEnum call is just wasted time, remove them if you can.
 	end
 
@@ -447,6 +454,7 @@ function UpdateAI() -- Added to remove weapon bucket variable manip
 
 	ScheduleCall(data.UpdatePeriod, UpdateAI)
 end
+
 
 function CheckDeviceForRebuild(deviceId, saveName, nodeA, nodeB)
 	if data.gameEnded or data.HumanAssist then return end
@@ -1128,28 +1136,6 @@ function Load(gameStart)
   
   GetAttackHintsFromProps(teamId%MAX_SIDES)
 end
---[[
-function Load()
-   --Log("m")
-   local count =GetWeaponCountSide(2)
-   Log("r")
-   for i=0,count-1 do
-      local id = GetWeaponIdSide(2, i)
-      local savename = GetDeviceType(id)
-      local cost = GetWeaponFireCost(id)
-      Log('[\"'..savename..'\"] = Value('..cost.metal..","..cost.energy..")")
-   end
-   Log("e")
-   for key, value in pairs(AllTypesOfDevicesAndWeapons) do
-      --cost = GetWeaponFireCost(AllTypesOfDevicesAndWeapons[i])
-      --Log(""..value)
-      if data.IgnoreProtectionProbability[value] then
-         Log('[\"'..value..'\"] = '..tonumber(string.format("%.3f", data.IgnoreProtectionProbability[value])))
-      else
-         Log('[\"'..value..'\"] = 0')
-      end
-   end
- end]]
 
 function FindStartingEnemyDevices()
   --local sideDevices = {}
@@ -1202,19 +1188,12 @@ function AddDeviceToEnemySide(id,saveName)
 end
 
 function RemoveDeviceFromEnemySide(id,saveName)
-   Log("try remove "..id.." "..saveName)
   --Log("rdtes")
   --Log("AI team: "..teamId.."Enemy: "..enemyTeamId.." "..Id.." "..saveName)
   --Log("Remove, Enemy: "..enemyTeamId.." "..Id.." "..saveName)
-  for i=1,#data.DevicesOnEnemyTeam[saveName] do
-     if data.DevicesOnEnemyTeam[saveName][i] == id then data.DevicesOnEnemyTeam[saveName][i] = nil return end--[[table.remove(data.DevicesOnEnemyTeam,i)]]
-  end
-  Log("Failed to remove")
-  if DeviceExists(id) then
-      SpawnCircle(GetDeviceCentrePosition(id),50,Red(),3)
-  else
-   Log("Device doesn't exist?")
-  end
+   for i=1,#data.DevicesOnEnemyTeam[saveName] do
+      if data.DevicesOnEnemyTeam[saveName][i] == id then table.remove(data.DevicesOnEnemyTeam,i) return end
+   end
 end
 
 function AddDeviceToTeamWeapons(Id,saveName)
@@ -1288,22 +1267,6 @@ function OnDeviceDeleted(deviceTeamId, deviceId, saveName, nodeA, nodeB, t)
 end
 
 function OnDeviceDestroyed(deviceTeamId, deviceId, saveName, nodeA, nodeB, t,CalledRecursively) -- TODO make sure tables are read in the rihght order also make stuff is randomized here and in find new
-   if deviceTeamId%100 == enemyTeamId then
-   if enemyTeamId == 2 then
-      Log("!")
-      for index, v in pairs(data.DevicesOnEnemyTeam) do
-         for key, value in pairs(v) do
-            if DeviceExists(value) then
-               Log(index.." "..value)
-            else
-               Log("device: "..index.." "..value.." No longer exists")
-            end
-         end
-      end
-   end
-   end
-   --Log("Team: "..enemyTeamId)
-   --BetterLog(data.DevicesOnEnemyTeam)
   if not CalledRecursively then
      --Log("destroyed"..deviceId..saveName)
      --BetterLog(data.DevicesOnEnemyTeam)
@@ -1428,17 +1391,6 @@ function FindPriorityTarget(weaponId, type, _, needLineOfSight, needLineToStruct
   local MaxPriority = 0
   local bestTarget = nil
   local hitpoints = data.ProjectileHitpoints[type]
-  GetRandomFloat(0, 1, "FindPriorityTarget IP " .. weaponId)
-  --if random 
-  --data.WeaponFireTypeProbabilities
-  --local ignoreProtectionProb = data.IgnoreProtectionProbability[type]
-  --apple = RandomFloat%0.000001*1000000+0.01
-  --Log("Better Roll "..apple)
-  --[[if ignoreProtectionProb ~= nil and GetRandomFloat(0, 1, "FindPriorityTarget IP " .. weaponId) <= ignoreProtectionProb then
-     LogLower("  Ignoring protection")
-     SpawnCircle(GetDeviceCentrePosition(weaponId), 30, Blue(), 2)
-     hitpoints = 100000000
-  end]]
 
   for k=1,#priorities[type] do
      if priorities[type][k][2] < 0 then continue end -- don't cast ray if direct hit has negative priority
@@ -1574,6 +1526,13 @@ function IsTargetObstructed(weaponId, weaponType, pos, hitpoints,needLineOfSight
            LogLower("(Lobbed Projectile) ground ray hit terrain")
            return true, false
         end
+        	-- has line of sight
+			-- shoot ray from artificial pos to target pos to check if projectile has enough hp/splash
+			hitType, dmgDealt = CastTargetObstructionRayNew(testPos, pos, hitpoints, rayFlags, weaponType, targetId, weaponId)
+
+			if hitType == data.RAY_HIT_OBSTRUCTED then return true, false end
+
+			return false, dmgDealt
      else
         LogLower("(Lobbed Projectile) no firing solution")
         return true, false
@@ -1807,6 +1766,147 @@ end
 
 function comparePositions(pos1, pos2)
   return (pos1.x == pos2.x and pos1.y == pos2.y)
+end
+
+function TryFireGun(id, useGroup)
+	if data.gameEnded then
+		return
+	end
+
+	if not DeviceExists(id) then
+		LogDetail("TryFireGun device no longer exists")
+		return
+	end
+
+	local type = GetDeviceType(id)
+
+	LogFunction("TryFireGun " .. type .. " Id " .. id)
+
+	if data.ActionQueue[id] then
+		LogDetail("Processing action queue")
+		return _G[data.ActionQueue[id].ProcessFunction](data.ActionQueue[id])
+	end
+	
+	local group = useGroup
+	if group then
+		LogDetail("  Attempting repeated fire of group, validating. leader " .. type)
+		
+		for k = #group,2,-1 do
+			if not DeviceExists(group[k]) then
+				LogDetail("  lost group member " .. group[k])
+				table.remove(group, k)
+			end
+		end
+	else
+		for i = 1, ScheduledCallCountOfFunc(TryFireGun) do
+			local attemptedGroup = GetScheduledCallOfFuncParam(TryFireGun, 1, 2)
+			if attemptedGroup then
+				for j = 1, #attemptedGroup do
+					if attemptedGroup[j] == id then
+						LogDetail("  TryFireGun of " .. id .. " aborted: part of a group " .. type)
+						return
+					end
+				end
+			end
+		end
+
+		group = { id }
+	end
+
+	local probability = data.OffensiveFireProbability[type]
+
+	--Log("TryFireGun " .. type .. ": probability " .. tostring(probability))
+
+	-- don't use defensive weapons for offence
+	if not useGroup and probability and GetRandomFloat(0, 1, "TryFireGun 1 " .. id) > probability then
+		--Log("Aborting fire due to random chance")
+		return
+	end
+
+	-- don't try to use weapons painting a target for other weapons
+	-- or it's being used by a human player or reloading
+	if IsSpotter(type, teamId) and (IsWeaponSpotting(id) or data.SpotterInUse[id]) then
+		LogDetail("Weapon not available (spotting)")
+		return
+	elseif not IsAIDeviceAvailable(id) or data.MissileLaunching[id] then
+		LogDetail("Weapon not available (in use)")
+		return
+	elseif not IsWeaponReadyToFire(id) then
+		TryCloseWeaponGroupDoors(group)
+		LogDetail("Weapon not available (reloading)")
+		return
+	end
+	
+	local teamResources = GetTeamResources(teamId)
+	if not CanAfford(teamResources - GetWeaponFireCost(id)) then
+		LogDetail("can't afford to fire weapon: resources = " .. teamResources .. ", cost = " .. GetWeaponFireCost(id))
+		TryCloseWeaponGroupDoors(group)
+		return
+	end
+
+	if not useGroup then
+		group = SelectWeaponGroup(id)
+	end
+	
+	local currentTarget = FindTarget(id, type)
+	if currentTarget == nil then
+		LogDetail("No target")
+		if not data.SpotterInUse[id] and not data.MissileLaunching[id] then
+			ScheduleCall(data.NoTargetCloseDoorDelay, TryCloseWeaponGroupDoors, group)
+		end
+		return
+	end
+
+	if #group > 0 then
+		LogDetail("Firing group with " .. #group .. " members")
+		local doorsObstructing = false
+		for k = #group,1,-1 do
+			local gid = group[k]
+			type = GetDeviceType(gid)
+			if not RequiresSpotter(type, teamId) then
+				data.offenceBucket = data.offenceBucket + 2
+				LogDetail("Attempting to open group weapon doors " .. gid .. " of type " .. type)
+				local result = FireWeapon(gid, currentTarget, 0, FIREFLAG_TEST | FIREFLAG_FORCEDOORSOPEN | FIREFLAG_EXTRACLEARANCE)
+				if result == FIRE_DOOR then
+					doorsObstructing = true
+				end
+			end
+		end
+		if doorsObstructing then
+			LogDetail("  Doors obstructing group, opening. leader " .. type)
+			ScheduleCall(data.GroupDoorOpenDelay, TryFireGun, id, group)
+			return
+		end
+
+		for k = #group,1,-1 do
+			local gid = group[k]
+			type = GetDeviceType(gid)
+			if not RequiresSpotter(type, teamId) then
+				data.offenceBucket = data.offenceBucket + 2
+				LogDetail("Attempting to fire group weapon " .. gid .. " of type " .. type)
+				--local result = FireWeapon(gid, currentTarget, data.FireErrorStdDevOverride[type] or FireErrorStdDev[type] or data.FireStdDevDefault, FIREFLAG_EXTRACLEARANCE)
+				local result = FireWeaponHandler(gid, type, currentTarget, data.FireErrorStdDevOverride[type] or FireErrorStdDev[type] or data.FireStdDevDefault, data.FireWeaponHandlerFireFlags)
+				if result == FIRE_SUCCESS then
+					LogDetail("Fired weapon " .. gid .. " of type " .. type)
+					-- close door in a little delay
+					TryCloseWeaponDoorsWithDelay(gid, "TryFireGun 2 door ", data.CloseDoorDelay[type])
+					data.offencePoints = data.offencePoints - 1
+				elseif result == FIRE_DOOR then
+					LogDetail("  Door hit, retry single weapon " .. gid)
+					-- door will be opening, try again soon
+					ScheduleCall(data.GroupDoorOpenDelay, TryFireGun, gid)
+				else
+					LogError(FIRE[result] .. ": close doors after failure")
+					TryCloseWeaponDoorsWithDelay(gid, "TryFireGun 3 door ")
+				end
+				table.remove(group, k)
+			end
+		end
+		-- remaining members require painting
+		if #group > 0 then
+			PaintTarget(group, currentTarget)
+		end
+	end
 end
 
 -- custom function by @cronkhinator for TargetObstruction check
@@ -2215,9 +2315,7 @@ function ExecuteFortAction(action, index)
         elseif UpgradeSource[action.DeviceSaveName] then -- upgraded existing device
            LogDetail("checking device type for upgrade")
            if GetDeviceType(id) == UpgradeSource[action.DeviceSaveName] then
-              if false --[[not IsDeviceAvailable(id)]] then
-                 return false -- device is in use by a human, don't upgrade it
-              elseif IsDummy(id) then
+              if IsDummy(id) then
                  return false
               end
 
@@ -2295,10 +2393,7 @@ function ExecuteFortAction(action, index)
            end
         elseif UpgradeSource[action.DeviceSaveName] then -- try to upgrade existing device
            if GetDeviceType(id) == UpgradeSource[action.DeviceSaveName] then
-              if false --[[not IsDeviceAvailable(id)]] then
-              Log("BadBadBad")
-                 return false -- device is in use by a human, don't upgrade it
-              elseif IsDummy(id) then
+              if IsDummy(id) then
                  return false
               end
 
@@ -2425,7 +2520,7 @@ function RepairEnumeratedLink(nodeA, nodeB, saveName, relativeHealth, stress, se
   end
   if deviceId > 0
      and not data.MissileLaunching[deviceId]
-     --[[and IsDeviceAvailable(deviceId)]]
+      and IsDeviceAvailable(deviceId)
      and not data.ResourceStarved then
      LogEnum("Repairing link device " .. deviceId)
      RepairDevice(deviceId)
