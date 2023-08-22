@@ -242,6 +242,7 @@ data.CloseDoorDelay =
 {
 	["rocket"] = 0.2,
 	["rocketemp"] = 0.2,
+	["laser"] = 0.5,
 }
 
 WeaponFiresLobbedProjectile =
