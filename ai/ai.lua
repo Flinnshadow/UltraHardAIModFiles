@@ -455,15 +455,19 @@ function UpdateAI() -- Added to remove weapon bucket variable manip
 	ScheduleCall(data.UpdatePeriod, UpdateAI)
 end
 
-function UpdateWeapon(index)
+function UpdateWeapon(index,call)
 	local id = GetWeaponId(teamId, index)
 	if id > 0 then
+      if call and not IsWeaponReadyToFire(id) then
+         Log("Weapon: "..GetDeviceType(id).." index"..index.." Not reloaded")
+      end
 		--[[if IsDummy(id) then
 			--LogError("Weapon dummy: " .. id)
 			return false
 		end]]
 
 		if TableLength(data.ActionQueue) > 0 and data.ActionQueue[id] == nil then
+         Log("return F")
 			return false
 		end
 		
@@ -477,18 +481,13 @@ function UpdateWeapon(index)
 				probability = data.StarvedProbabilityFactor*probability
 			end
 			if GetRandomFloat(0,1, "UpdateWeapon " .. id) > probability then
+            Log("RS")
 				--LogDetail("Avoiding fire of " .. type .. " during " .. context .. ", probability " .. probability)
 				return false
 			end
 		end
-
-		if IsDeviceAvailable(id) then
-			TryFireGun(id,nil,index)
-			return true
-		else
-			--LogError("Weapon unavailable: " .. id .. ", " .. GetDeviceType(id))
-			return false
-		end
+      TryFireGun(id,nil,index)
+      return true
 	else
 		--LogError("Weapon not found " .. id)
 		return false
@@ -1813,26 +1812,26 @@ function TryFireGun(id, useGroup,index)
 	end
 
 	if not DeviceExists(id) then
-		LogDetail("TryFireGun device no longer exists")
+		--LogDetail("TryFireGun device no longer exists")
 		return
 	end
 
 	local type = GetDeviceType(id)
 
-	LogFunction("TryFireGun " .. type .. " Id " .. id)
+	--LogFunction("TryFireGun " .. type .. " Id " .. id)
 
 	if data.ActionQueue[id] then
-		LogDetail("Processing action queue")
+		Log("Processing action queue")
 		return _G[data.ActionQueue[id].ProcessFunction](data.ActionQueue[id])
 	end
 	
 	local group = useGroup
 	if group then
-		LogDetail("  Attempting repeated fire of group, validating. leader " .. type)
+		--LogDetail("  Attempting repeated fire of group, validating. leader " .. type)
 		
 		for k = #group,2,-1 do
 			if not DeviceExists(group[k]) then
-				LogDetail("  lost group member " .. group[k])
+				--LogDetail("  lost group member " .. group[k])
 				table.remove(group, k)
 			end
 		end
@@ -1842,7 +1841,7 @@ function TryFireGun(id, useGroup,index)
 			if attemptedGroup then
 				for j = 1, #attemptedGroup do
 					if attemptedGroup[j] == id then
-						LogDetail("  TryFireGun of " .. id .. " aborted: part of a group " .. type)
+						--LogDetail("  TryFireGun of " .. id .. " aborted: part of a group " .. type)
 						return
 					end
 				end
@@ -1865,20 +1864,20 @@ function TryFireGun(id, useGroup,index)
 	-- don't try to use weapons painting a target for other weapons
 	-- or it's being used by a human player or reloading
 	if IsSpotter(type, teamId) and (IsWeaponSpotting(id) or data.SpotterInUse[id]) then
-		LogDetail("Weapon not available (spotting)")
+		--LogDetail("Weapon not available (spotting)")
 		return
-	elseif not IsAIDeviceAvailable(id) or data.MissileLaunching[id] then
-		LogDetail("Weapon not available (in use)")
+	elseif --[[not IsAIDeviceAvailable(id) or]] data.MissileLaunching[id] then
+		--LogDetail("Weapon not available (in use)")
 		return
 	elseif not IsWeaponReadyToFire(id) then
 		TryCloseWeaponGroupDoors(group)
-		LogDetail("Weapon not available (reloading)")
+		--LogDetail("Weapon not available (reloading)")
 		return
 	end
 	
 	local teamResources = GetTeamResources(teamId)
 	if not CanAfford(teamResources - GetWeaponFireCost(id)) then
-		LogDetail("can't afford to fire weapon: resources = " .. teamResources .. ", cost = " .. GetWeaponFireCost(id))
+		--LogDetail("can't afford to fire weapon: resources = " .. teamResources .. ", cost = " .. GetWeaponFireCost(id))
 		TryCloseWeaponGroupDoors(group)
 		return
 	end
@@ -1889,7 +1888,7 @@ function TryFireGun(id, useGroup,index)
 	
 	local currentTarget = FindTarget(id, type)
 	if currentTarget == nil then
-		LogDetail("No target")
+		--LogDetail("No target")
 		if not data.SpotterInUse[id] and not data.MissileLaunching[id] then
 			ScheduleCall(data.NoTargetCloseDoorDelay, TryCloseWeaponGroupDoors, group)
 		end
@@ -1897,14 +1896,14 @@ function TryFireGun(id, useGroup,index)
 	end
    groupsize = #group
 	if groupsize > 0 then
-		LogDetail("Firing group with " .. #group .. " members")
+		--LogDetail("Firing group with " .. #group .. " members")
 		local doorsObstructing = false
 		for k = #group,1,-1 do
 			local gid = group[k]
 			type = GetDeviceType(gid)
 			if not RequiresSpotter(type, teamId) then
 				data.offenceBucket = data.offenceBucket + 2
-				LogDetail("Attempting to open group weapon doors " .. gid .. " of type " .. type)
+				--LogDetail("Attempting to open group weapon doors " .. gid .. " of type " .. type)
 				local result = FireWeapon(gid, currentTarget, 0, FIREFLAG_TEST | FIREFLAG_FORCEDOORSOPEN | FIREFLAG_EXTRACLEARANCE)
 				if result == FIRE_DOOR then
 					doorsObstructing = true
@@ -1912,7 +1911,7 @@ function TryFireGun(id, useGroup,index)
 			end
 		end
 		if doorsObstructing then
-			LogDetail("  Doors obstructing group, opening. leader " .. type)
+			--LogDetail("  Doors obstructing group, opening. leader " .. type)
 			ScheduleCall(data.GroupDoorOpenDelay, TryFireGun, id, group)
 			return
 		end
@@ -1922,23 +1921,23 @@ function TryFireGun(id, useGroup,index)
 			type = GetDeviceType(gid)
 			if not RequiresSpotter(type, teamId) then
 				data.offenceBucket = data.offenceBucket + 2
-				LogDetail("Attempting to fire group weapon " .. gid .. " of type " .. type)
+				--LogDetail("Attempting to fire group weapon " .. gid .. " of type " .. type)
 				--local result = FireWeapon(gid, currentTarget, data.FireErrorStdDevOverride[type] or FireErrorStdDev[type] or data.FireStdDevDefault, FIREFLAG_EXTRACLEARANCE)
 				local result = FireWeaponHandler(gid, type, currentTarget, data.FireErrorStdDevOverride[type] or FireErrorStdDev[type] or data.FireStdDevDefault, data.FireWeaponHandlerFireFlags)
 				if result == FIRE_SUCCESS then
-					LogDetail("Fired weapon " .. gid .. " of type " .. type)
+					--LogDetail("Fired weapon " .. gid .. " of type " .. type)
 					-- close door in a little delay
 					TryCloseWeaponDoorsWithDelay(gid, "TryFireGun 2 door ", data.CloseDoorDelay[type])
 					data.offencePoints = data.offencePoints - 1
                if groupsize == 1 then
-                  ScheduleCall(GetWeaponReloadPeriodById(id),UpdateWeapon,index)
+                  ScheduleCall(GetWeaponReloadPeriodById(id)+0.2,UpdateWeapon,index,true)
                end
 				elseif result == FIRE_DOOR then
-					LogDetail("  Door hit, retry single weapon " .. gid)
+					--LogDetail("  Door hit, retry single weapon " .. gid)
 					-- door will be opening, try again soon
 					ScheduleCall(data.GroupDoorOpenDelay, TryFireGun, gid)
 				else
-					LogError(FIRE[result] .. ": close doors after failure")
+					--LogError(FIRE[result] .. ": close doors after failure")
 					TryCloseWeaponDoorsWithDelay(gid, "TryFireGun 3 door ")
 				end
 				table.remove(group, k)
@@ -1977,7 +1976,7 @@ function SelectWeaponGroup(id)
 			and ((not rebuilding and not data.ResourceStarved) or GetRandomFloat(0,1,"SelectWeaponGroup 1 " .. id) <= fireProbDuringReload)
 			and weaponAffinityOfType and GetRandomFloat(0,1,"SelectWeaponGroup 2 " .. id) <= weaponAffinityOfType
 			and IsWeaponReadyToFire(weaponId)
-			and IsDeviceAvailable(weaponId)
+			--[[and IsDeviceAvailable(weaponId)]]
 			and CanAfford(teamResources - totalCost - weaponFireCost)
 			and offencePoints >= 1 then
 			LogDetail("  found group member " .. weaponId .. " affinity " .. tostring(weaponAffinityOfType))
@@ -2615,7 +2614,7 @@ function RepairEnumeratedLink(nodeA, nodeB, saveName, relativeHealth, stress, se
   end
   if deviceId > 0
      and not data.MissileLaunching[deviceId]
-      and IsDeviceAvailable(deviceId)
+      --[[and IsDeviceAvailable(deviceId)]]
      and not data.ResourceStarved then
      LogEnum("Repairing link device " .. deviceId)
      RepairDevice(deviceId)
