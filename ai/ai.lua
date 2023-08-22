@@ -235,6 +235,7 @@ data.CloseDoorDelay =
 {
 	["rocket"] = 0.2,
 	["rocketemp"] = 0.2,
+   ["laser"] = 0.5,
 }
 
 WeaponFiresLobbedProjectile =
@@ -455,12 +456,9 @@ function UpdateAI() -- Added to remove weapon bucket variable manip
 	ScheduleCall(data.UpdatePeriod, UpdateAI)
 end
 
-function UpdateWeapon(index,call)
+function UpdateWeapon(index)
 	local id = GetWeaponId(teamId, index)
 	if id > 0 then
-      if call and not IsWeaponReadyToFire(id) then
-         Log("Weapon: "..GetDeviceType(id).." index"..index.." Not reloaded")
-      end
 		--[[if IsDummy(id) then
 			--LogError("Weapon dummy: " .. id)
 			return false
@@ -1143,7 +1141,7 @@ function Load(gameStart)
   data.Frustration = {}
   data.offenceBucket = 0 -- tracks the opportunities for offence
   data.offencePoints = 100000000 -- shooting weapons require these points so mission scripts can throttle or gate offence
-  data.maxGroupSize = 5
+  data.maxGroupSize = 1
 
   DiscoverOriginalNodes()
 
@@ -1930,7 +1928,7 @@ function TryFireGun(id, useGroup,index)
 					TryCloseWeaponDoorsWithDelay(gid, "TryFireGun 2 door ", data.CloseDoorDelay[type])
 					data.offencePoints = data.offencePoints - 1
                if groupsize == 1 then
-                  ScheduleCall(GetWeaponReloadPeriodById(id)+0.2,UpdateWeapon,index,true)
+                  ScheduleCall(GetWeaponReloadPeriodById(id)+0.2,UpdateWeapon,index)
                end
 				elseif result == FIRE_DOOR then
 					--LogDetail("  Door hit, retry single weapon " .. gid)
@@ -2604,7 +2602,7 @@ end
 
 function RepairEnumeratedLink(nodeA, nodeB, saveName, relativeHealth, stress, segmentsOnFire, deviceId)
   if relativeHealth < data.repairDamageThreshold or segmentsOnFire > 0 then
-     LogEnum("repairing link: " .. (nodeA or "nil") .. ", " .. (nodeB or "nil"))
+     --LogEnum("repairing link: " .. (nodeA or "nil") .. ", " .. (nodeB or "nil"))
      if nodeA and nodeB and (not data.DisableExtinguish or segmentsOnFire == 0) then
         if data.OpenDoors[nodeA .. " " .. nodeB] ~= true then
            RepairLink(nodeA, nodeB)
@@ -2616,7 +2614,7 @@ function RepairEnumeratedLink(nodeA, nodeB, saveName, relativeHealth, stress, se
      and not data.MissileLaunching[deviceId]
       --[[and IsDeviceAvailable(deviceId)]]
      and not data.ResourceStarved then
-     LogEnum("Repairing link device " .. deviceId)
+     --LogEnum("Repairing link device " .. deviceId)
      RepairDevice(deviceId)
   end
   
