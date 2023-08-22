@@ -94,7 +94,7 @@ data.DoorCloseDelayMin = 0
 data.DoorCloseDelayMax = 0.05
 --data.DoorCloseDelayMax = 6
 data.NoTargetCloseDoorDelay = 0.1
-data.GroupDoorOpenDelay = 0.1
+data.GroupDoorOpenDelay = 0
 data.MissileDoorFireDelay = 0.1
 data.RepairPeriod = 0.3
 --data.ReplaceDeviceDelayMin = 0
@@ -320,7 +320,7 @@ function UpdateAI() -- Added to remove weapon bucket variable manip
 			repeat
 				if data.currWeapon < weaponCount then
                --UpdateWeapon(data.currWeapon, not data.activeBuilding)                                                       --//Note, Removed all delay on weapon fireing, not ideal but prob not bad eithter, will cause more lag
-					if data.offencePoints >= 1 and UpdateWeapon(data.currWeapon, not data.activeBuilding) then
+					if data.offencePoints >= 1 and UpdateWeapon(data.currWeapon--[[, not data.activeBuilding]]) then
 						data.offencePoints = data.offencePoints - 1
 						done = true
 					end
@@ -455,6 +455,45 @@ function UpdateAI() -- Added to remove weapon bucket variable manip
 	ScheduleCall(data.UpdatePeriod, UpdateAI)
 end
 
+function UpdateWeapon(index)
+	local id = GetWeaponId(teamId, index)
+	if id > 0 then
+		--[[if IsDummy(id) then
+			--LogError("Weapon dummy: " .. id)
+			return false
+		end]]
+
+		if TableLength(data.ActionQueue) > 0 and data.ActionQueue[id] == nil then
+			return false
+		end
+		
+		if data.ResourceStarved then
+			-- some weapons take too many resources from reconstruction efforts
+			-- decide based on probability table
+			local type = GetDeviceType(id)
+			local probability = (data.FireDuringRebuildProbability[type] or 0)
+			if data.ResourceStarved then
+				-- reduce fire rate to save
+				probability = data.StarvedProbabilityFactor*probability
+			end
+			if GetRandomFloat(0,1, "UpdateWeapon " .. id) > probability then
+				--LogDetail("Avoiding fire of " .. type .. " during " .. context .. ", probability " .. probability)
+				return false
+			end
+		end
+
+		if IsDeviceAvailable(id) then
+			TryFireGun(id,nil,index)
+			return true
+		else
+			--LogError("Weapon unavailable: " .. id .. ", " .. GetDeviceType(id))
+			return false
+		end
+	else
+		--LogError("Weapon not found " .. id)
+		return false
+	end
+end
 
 function CheckDeviceForRebuild(deviceId, saveName, nodeA, nodeB)
 	if data.gameEnded or data.HumanAssist then return end
@@ -1768,7 +1807,7 @@ function comparePositions(pos1, pos2)
   return (pos1.x == pos2.x and pos1.y == pos2.y)
 end
 
-function TryFireGun(id, useGroup)
+function TryFireGun(id, useGroup,index)
 	if data.gameEnded then
 		return
 	end
@@ -1856,8 +1895,8 @@ function TryFireGun(id, useGroup)
 		end
 		return
 	end
-
-	if #group > 0 then
+   groupsize = #group
+	if groupsize > 0 then
 		LogDetail("Firing group with " .. #group .. " members")
 		local doorsObstructing = false
 		for k = #group,1,-1 do
@@ -1878,7 +1917,7 @@ function TryFireGun(id, useGroup)
 			return
 		end
 
-		for k = #group,1,-1 do
+		for k = groupsize,1,-1 do
 			local gid = group[k]
 			type = GetDeviceType(gid)
 			if not RequiresSpotter(type, teamId) then
@@ -1891,6 +1930,9 @@ function TryFireGun(id, useGroup)
 					-- close door in a little delay
 					TryCloseWeaponDoorsWithDelay(gid, "TryFireGun 2 door ", data.CloseDoorDelay[type])
 					data.offencePoints = data.offencePoints - 1
+               if groupsize == 1 then
+                  ScheduleCall(GetWeaponReloadPeriodById(id),UpdateWeapon,index)
+               end
 				elseif result == FIRE_DOOR then
 					LogDetail("  Door hit, retry single weapon " .. gid)
 					-- door will be opening, try again soon
@@ -1907,6 +1949,59 @@ function TryFireGun(id, useGroup)
 			PaintTarget(group, currentTarget)
 		end
 	end
+end
+
+function SelectWeaponGroup(id)
+	local weaponCount = GetWeaponCount(teamId)
+	local group = { id }
+	local weaponTypeLeader = GetDeviceType(id)
+   local totalCost = WeaponFireCosts[weaponTypeLeader] or Value(0,0)
+	local weaponAffinity = data.GroupingAffinity[weaponTypeLeader]
+	local offencePoints = data.offencePoints - 1
+	local teamResources = GetTeamResources(teamId)
+
+	--LogDetail("Trying to group " .. id .. " of " .. weaponTypeLeader)
+
+	for index = 0,weaponCount - 1 do
+		local weaponId = GetWeaponId(teamId, index)
+		local weaponType = GetDeviceType(weaponId)
+		local weaponFireCost = WeaponFireCosts[weaponType] or Value(0,0)--GetWeaponFireCost(weaponId)
+		local fireProbDuringReload = data.FireDuringRebuildProbability[weaponType] or 0
+		local weaponAffinityOfType = weaponAffinity and weaponAffinity[weaponType] or 0
+		if data.ResourceStarved then
+			fireProbDuringReload = data.StarvedProbabilityFactor*fireProbDuringReload
+		end
+		LogDetail("  testing " .. weaponId .. " of " .. GetDeviceType(weaponId) .. " for membership, affinity " .. tostring(weaponAffinityOfType))
+		if #group < data.maxGroupSize and weaponId ~= id
+			and not data.MissileLaunching[weaponId]
+			and ((not rebuilding and not data.ResourceStarved) or GetRandomFloat(0,1,"SelectWeaponGroup 1 " .. id) <= fireProbDuringReload)
+			and weaponAffinityOfType and GetRandomFloat(0,1,"SelectWeaponGroup 2 " .. id) <= weaponAffinityOfType
+			and IsWeaponReadyToFire(weaponId)
+			and IsDeviceAvailable(weaponId)
+			and CanAfford(teamResources - totalCost - weaponFireCost)
+			and offencePoints >= 1 then
+			LogDetail("  found group member " .. weaponId .. " affinity " .. tostring(weaponAffinityOfType))
+			-- add slave to group and pass to PaintTarget
+			table.insert(group, weaponId)
+			totalCost = totalCost + weaponFireCost
+			offencePoints = offencePoints - 1
+		--[[elseif IsDummy(weaponId) then
+			LogDetail("  dummy")]]
+		elseif not IsWeaponReadyToFire(weaponId) then
+			--LogDetail("  reloading")
+		elseif not CanAfford(teamResources - totalCost - weaponFireCost) then
+			--LogDetail("  can't afford")
+		end
+	end
+
+	if #group ~= 1 or weaponAffinity == nil or weaponAffinity["alone"] == nil or GetRandomFloat(0,1,"SelectWeaponGroup 3 " .. id) <= weaponAffinity["alone"] then
+		--LogEnum("returning group with " .. #group .. " members")
+	else
+		group = {}
+		--LogDetail("avoiding firing " .. GetDeviceType(id) .. " alone")
+	end
+	
+	return group -- empty group, don't fire
 end
 
 -- custom function by @cronkhinator for TargetObstruction check
