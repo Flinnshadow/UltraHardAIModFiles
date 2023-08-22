@@ -408,7 +408,6 @@ function Load(gameStart)
 
    FindStartingEnemyDevices()
    FindStartingTeamWeapon()
-   BetterLog(data.DevicesOnEnemyTeam)
 	local debugLevel = GetConstant("AI.DebugLevel")
 	if debugLevel >= LOG_CONFIG and GetGameMode() ~= "Multiplayer" then
 		UpdateLogLevel(debugLevel)
