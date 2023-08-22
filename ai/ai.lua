@@ -187,12 +187,12 @@ data.ProjectileSplash =
   ["mortar2"] = 130,
   ["missile2"] = 350,
   ["missile2inv"] = 350,
-  ["cannon"] = 200/2,
+  ["cannon"] = 200-40,
   ["firebeam"] = 160 + 60,
   ["rocketemp"] = 150+50+20,
   ["rocket"] = 200+10,
-  ["cannon20mm"] = 100-30,
-  ["howitzer"] = 250-50,
+  ["cannon20mm"] = 100-20,
+  ["howitzer"] = 250-30,
   ["buzzsaw"] = 50,
 }
 
@@ -262,13 +262,6 @@ end
 
 for k, v in pairs(data.FireDuringRebuildProbability) do
   data.FireDuringRebuildProbability[k] = 1-((1-v)*0.7)
-end
-
--- Stop AI from favoring turbines
-for i, v in ipairs(SmallArmsPriorities) do
-  if v == "turbine" or v == "turbine2" then
-     table.remove(SmallArmsPriorities, i)
-  end
 end
 
 function UpdateAI() -- Added to remove weapon bucket variable manip
@@ -1015,7 +1008,7 @@ WeaponFireCosts =
   ["howitzer"] = Value(70,4000),
   ["firebeam"] = Value(0,3000/0.6), -- 800 per second
   ["magnabeam"] = Value(0,5000/0.4), --428.5 per second
-  ["laser"] = Value(0,5000/0.8), --3333.33 per second
+  ["laser"] = Value(0,5000/0.8), --3333.33 per second, Set to be able to fire at 80% of the required resou
 }
 AllTypesOfDevicesAndWeapons = {
   "machinegun",
@@ -1226,9 +1219,13 @@ end
 function RemoveDeviceFromEnemySide(id,saveName)
   --Log("rdtes")
   --Log("AI team: "..teamId.."Enemy: "..enemyTeamId.." "..Id.." "..saveName)
-  --Log("Remove, Enemy: "..enemyTeamId.." "..Id.." "..saveName)
+   --Log("Remove, Enemy: "..enemyTeamId.." "..id.." "..saveName)
    for i=1,#data.DevicesOnEnemyTeam[saveName] do
       if data.DevicesOnEnemyTeam[saveName][i] == id then table.remove(data.DevicesOnEnemyTeam,i) return end
+      if data.DevicesOnEnemyTeam[saveName][i] == id then
+		   table.remove(data.DevicesOnEnemyTeam[saveName],i)
+		   return
+	   end
    end
 end
 
@@ -1910,7 +1907,7 @@ function TryFireGun(id, useGroup,index)
 		end
 		if doorsObstructing then
 			--LogDetail("  Doors obstructing group, opening. leader " .. type)
-			ScheduleCall(data.GroupDoorOpenDelay, TryFireGun, id, group)
+			ScheduleCall(data.GroupDoorOpenDelay, TryFireGun, id, group,index)
 			return
 		end
 
@@ -1933,7 +1930,7 @@ function TryFireGun(id, useGroup,index)
 				elseif result == FIRE_DOOR then
 					--LogDetail("  Door hit, retry single weapon " .. gid)
 					-- door will be opening, try again soon
-					ScheduleCall(data.GroupDoorOpenDelay, TryFireGun, gid)
+					ScheduleCall(data.GroupDoorOpenDelay, TryFireGun, gid,index)
 				else
 					--LogError(FIRE[result] .. ": close doors after failure")
 					TryCloseWeaponDoorsWithDelay(gid, "TryFireGun 3 door ")
@@ -2377,24 +2374,24 @@ function ExecuteFortAction(action, index)
            return true
         end
 
-        LogDetail("device id = " .. id)
+        --LogDetail("device id = " .. id)
 
         if id <= 0 then
-           LogDetail("Creating device " .. (UpgradeSource[action.DeviceSaveName] or action.DeviceSaveName))
+           --LogDetail("Creating device " .. (UpgradeSource[action.DeviceSaveName] or action.DeviceSaveName))
            local result = CreateGroundDevice(teamId, UpgradeSource[action.DeviceSaveName] or action.DeviceSaveName, action.GroundPosition, 90)
            data.ResourceStarved = (result == CD_INSUFFICIENTRESOURCES)
            if result >= 0 then
               -- success
               data.Devices[result] = index
               if UpgradeSource[action.DeviceSaveName] then
-                 LogDetail(" - building upgrade precursor...")
+                 --LogDetail(" - building upgrade precursor...")
                  return false -- need to come back to this action to build the upgraded device
               end
               return true
            elseif result == CD_OCCUPIED or result == CD_OBSTRUCTION or result == CD_INVALIDTYPE then
               -- assume for now it's occupied with something valuable
               -- maybe a human player put something there
-              LogDetail("Skip step due to being obstructed, occupied, or invalid.")
+              --LogDetail("Skip step due to being obstructed, occupied, or invalid.")
               return false, true
            else
               if not data.ResourceStarved and result ~= CD_PREREQUISITECONSTRUCT then
@@ -2405,14 +2402,14 @@ function ExecuteFortAction(action, index)
               return false, true
            end
         elseif UpgradeSource[action.DeviceSaveName] then -- upgraded existing device
-           LogDetail("checking device type for upgrade")
+           --LogDetail("checking device type for upgrade")
            if GetDeviceType(id) == UpgradeSource[action.DeviceSaveName] then
               if IsDummy(id) then
                  return false
               end
 
               -- try to upgrade what's there
-              LogDetail("upgrading " .. UpgradeSource[action.DeviceSaveName] .. " to " .. action.DeviceSaveName)
+              --LogDetail("upgrading " .. UpgradeSource[action.DeviceSaveName] .. " to " .. action.DeviceSaveName)
               result = UpgradeDevice(id, action.DeviceSaveName)
               data.ResourceStarved = (result == UD_INSUFFICIENTRESOURCES)
               if result >= 0 then
@@ -2428,11 +2425,11 @@ function ExecuteFortAction(action, index)
                  end
                  LogError(UD[result] .. ": retrying")
                  if isRebuild then
-                    LogDetail("isRebuild")
+                    --LogDetail("isRebuild")
                     -- do something else and try again later
                     return false, true
                  end
-                 LogDetail("not isRebuild")
+                 --LogDetail("not isRebuild")
                  return false
               end
            else
@@ -2440,7 +2437,7 @@ function ExecuteFortAction(action, index)
               return true
            end
         else
-           LogDetail("Obstructed by " .. id .. " (" .. GetDeviceType(id) .. "): waiting")
+           --LogDetail("Obstructed by " .. id .. " (" .. GetDeviceType(id) .. "): waiting")
            AddFrustration(index)
            return false
         end
@@ -2454,12 +2451,12 @@ function ExecuteFortAction(action, index)
 
         local id = GetDeviceIdOnPlatform(actualNodeA, actualNodeB)
         if id > 0 and GetDeviceTeamIdActual(id) ~= teamId then
-           LogError("Device not owned")
+           --LogError("Device not owned")
            return true
         end
         
         if id <= 0 then
-           LogDetail("creating device " .. action.DeviceSaveName .. " AN" .. actualNodeA .. "-AN" .. actualNodeB .. " t" .. action.LinkT)
+           --LogDetail("creating device " .. action.DeviceSaveName .. " AN" .. actualNodeA .. "-AN" .. actualNodeB .. " t" .. action.LinkT)
            local result = CreateDevice(teamId, UpgradeSource[action.DeviceSaveName] or action.DeviceSaveName, actualNodeA, actualNodeB, action.LinkT)
            data.ResourceStarved = (result == CD_INSUFFICIENTRESOURCES)
            if result >= 0 then
@@ -2473,13 +2470,13 @@ function ExecuteFortAction(action, index)
            elseif result == CD_OCCUPIED or result == CD_OBSTRUCTION or result == CD_INVALIDTYPE then
               -- assume it's occupied with something valuable a player built
               AddFrustration(index)
-              LogError(CD[result] .. ": skipping")
+              --LogError(CD[result] .. ": skipping")
               return false, true
            else
               if not data.ResourceStarved and result ~= CD_PREREQUISITECONSTRUCT then
                  AddFrustration(index)
               end
-              LogError(CD[result] .. ": retrying")
+              --LogError(CD[result] .. ": retrying")
               if isRebuild then return false, true end -- skip and try again later
               return false
            end
@@ -2489,25 +2486,25 @@ function ExecuteFortAction(action, index)
                  return false
               end
 
-              LogDetail("upgrading " .. UpgradeSource[action.DeviceSaveName] .. " to " .. action.DeviceSaveName)
+              --LogDetail("upgrading " .. UpgradeSource[action.DeviceSaveName] .. " to " .. action.DeviceSaveName)
               local result = UpgradeDevice(id, action.DeviceSaveName)
               if result >= 0 then
                  data.Devices[id] = nil -- forget original device
                  data.Devices[result] = index -- remember upgrade
                  return true
               elseif result == UD_INVALIDDEVICE or result == UD_INVALIDUPGRADE then
-                 LogError(UD[result] .. ": giving up")
+                 --LogError(UD[result] .. ": giving up")
                  return true
               elseif result == UD_PREREQUISITENOTMET then
-                 LogError(UD[result] .. ": skipping")
+                 --LogError(UD[result] .. ": skipping")
                  if isRebuild then return false, true end
                  return false
               else
-                 LogError(UD[result] .. ": retrying")
+                 --LogError(UD[result] .. ": retrying")
                  return false
               end
            else
-              LogError("Upgraded device location occupied by incompatible device")
+              --LogError("Upgraded device location occupied by incompatible device")
               return true
            end		
         elseif result == CD_PREREQUISITENOTMET and UpgradeSource[action.DeviceSaveName] then
@@ -2516,11 +2513,11 @@ function ExecuteFortAction(action, index)
            local result = CreateDevice(teamId, UpgradeSource[action.DeviceSaveName], actualNodeA, actualNodeB, action.LinkT)
            data.ResourceStarved = (result == CD_INSUFFICIENTRESOURCES)
            if result < 0 then
-              LogError(CD[result])
+              --LogError(CD[result])
            end
            return result >= 0
         else
-           LogError("Obstructed by " .. GetDeviceType(id) .. ", giving up")
+           --LogError("Obstructed by " .. GetDeviceType(id) .. ", giving up")
            return true
         end
      end
@@ -2576,7 +2573,7 @@ function ExecuteFortAction(action, index)
   end
   
   Log("Error: Reached end of ExecuteFortAction with action:")
-  LogAction(index, action)
+  --LogAction(index, action)
 end
 
 -----------------------------------------------------
