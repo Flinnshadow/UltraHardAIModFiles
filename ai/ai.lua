@@ -456,7 +456,7 @@ function UpdateAI() -- Added to remove weapon bucket variable manip
 	ScheduleCall(data.UpdatePeriod, UpdateAI)
 end
 
-function UpdateWeapon(index,call)
+function UpdateWeapon(index)
 	local id = GetWeaponId(teamId, index)
 	if id > 0 then
 		--[[if IsDummy(id) then
