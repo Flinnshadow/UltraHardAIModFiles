@@ -408,6 +408,7 @@ function Load(gameStart)
 
    FindStartingEnemyDevices()
    FindStartingTeamWeapon()
+   BetterLog(data.DevicesOnEnemyTeam)
 	local debugLevel = GetConstant("AI.DebugLevel")
 	if debugLevel >= LOG_CONFIG and GetGameMode() ~= "Multiplayer" then
 		UpdateLogLevel(debugLevel)
@@ -553,9 +554,12 @@ end
 function RemoveDeviceFromEnemySide(id,saveName)
    --Log("rdtes")
    --Log("AI team: "..teamId.."Enemy: "..enemyTeamId.." "..Id.." "..saveName)
-   --Log("Remove, Enemy: "..enemyTeamId.." "..Id.." "..saveName)
+   --Log("Remove, Enemy: "..enemyTeamId.." "..id.." "..saveName)
    for i=1,#data.DevicesOnEnemyTeam[saveName] do
-      if data.DevicesOnEnemyTeam[saveName][i] == id then table.remove(data.DevicesOnEnemyTeam,i) return end
+    if data.DevicesOnEnemyTeam[saveName][i] == id then
+		table.remove(data.DevicesOnEnemyTeam[saveName],i)
+		return
+	end
    end
 end
 
