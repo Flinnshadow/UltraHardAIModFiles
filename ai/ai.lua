@@ -111,7 +111,8 @@ data.ProjectileHitpoints["rocket"] = 0
 data.ProjectileHitpoints["firebeam"] = 0
 data.ProjectileHitpoints["buzzsaw"] = 40*19
 data.ProjectileHitpoints["shotgun"] = 160
-data.ProjectileHitPoints["sniper2"] = 650
+data.ProjectileHitpoints["sniper2"] = 650
+data.ProjectileHitpoints["sniper"] = 100 -- gradually increases with failed attempts
 
 data.AntiAirLateralStdDev =
 {
@@ -1423,7 +1424,7 @@ function FindPriorityTarget(weaponId, type, _, needLineOfSight, needLineToStruct
   LogLower("Finding target for " .. type .. "with id " .. weaponId)
 
   local MaxPriority = 0
-  local bestTarget = nil
+  local bestTarget = {}
   --Log("FailedAttempts: " .. (data.FailedAttempts[weaponId] or 0))
   local balls = (data.FailedAttempts[weaponId] or 0)
   local hitpoints = data.ProjectileHitpoints[type] * 1.05 ^ balls * (0.07*balls + 1)
@@ -1462,12 +1463,14 @@ function FindPriorityTarget(weaponId, type, _, needLineOfSight, needLineToStruct
                LogLower("MaxPriority: " .. MaxPriority .. ", targetPriority: " .. targetPriority)
                if MaxPriority < targetPriority then
                   MaxPriority = targetPriority
-                  bestTarget = targetPos
+                  bestTarget = {targetPos}
+               elseif MaxPriority == targetPriority then
+                  table.insert(bestTarget, targetPos)
                end
             end
          end
       end
-      if bestTarget == nil then
+      if #bestTarget == 0 then
          data.FailedAttempts[weaponId] = (data.FailedAttempts[weaponId] or 0) + 0.1
       end
    elseif data.WeaponFireTypeProbabilities.FireAtRandomTargetProbability[apple2] < apple then
@@ -1607,12 +1610,14 @@ function FindPriorityTarget(weaponId, type, _, needLineOfSight, needLineToStruct
                LogLower("MaxPriority: " .. MaxPriority .. ", targetPriority: " .. targetPriority)
                if MaxPriority < targetPriority then
                   MaxPriority = targetPriority
-                  bestTarget = targetPos
+                  bestTarget = {targetPos}
+               elseif MaxPriority == targetPriority then
+                  table.insert(bestTarget, targetPos)
                end
             end
          end
       end
-      if bestTarget == nil then
+      if #bestTarget == 0 then
          data.FailedAttempts[weaponId] = (data.FailedAttempts[weaponId] or 0) + 1
       end
    else
@@ -1647,18 +1652,20 @@ function FindPriorityTarget(weaponId, type, _, needLineOfSight, needLineToStruct
                LogLower("MaxPriority: " .. MaxPriority .. ", targetPriority: " .. targetPriority)
                if MaxPriority < targetPriority then
                   MaxPriority = targetPriority
-                  bestTarget = targetPos
+                  bestTarget = {targetPos}
+               elseif MaxPriority == targetPriority then
+                  table.insert(bestTarget, targetPos)
                end
             end
          end
       end
-      if bestTarget == nil then
+      if #bestTarget == 0 then
          data.FailedAttempts[weaponId] = (data.FailedAttempts[weaponId] or 0) + 1
       end
    end
    --Log("Firing at " .. (bestTarget or "nothing"))
-   if bestTarget then data.FailedAttempts[weaponId] = 0 end
-   return bestTarget
+   if #bestTarget > 0 then data.FailedAttempts[weaponId] = 0 end
+   return bestTarget[GetRandomInteger(1, #bestTarget, "FindPriorityTarget " .. bestTarget[1].x)]
 
   --TargetRandom = RandomFloat%0.000001*1000000+0.01
 
@@ -2010,7 +2017,7 @@ function TryFireGun(id, useGroup,index)
 			end
 		end
 	else
-		for i = 1, ScheduledCallCountOfFunc(TryFireGun) do
+		--[[for i = 1, ScheduledCallCountOfFunc(TryFireGun) do
 			local attemptedGroup = GetScheduledCallOfFuncParam(TryFireGun, 1, 2)
 			if attemptedGroup then
 				for j = 1, #attemptedGroup do
@@ -2020,7 +2027,7 @@ function TryFireGun(id, useGroup,index)
 					end
 				end
 			end
-		end
+		end]]--
 
 		group = { id }
 	end
@@ -2833,7 +2840,7 @@ data.WeaponFireTypeProbabilities = -- when fireing, it will roll a number, then 
    {
       ["machinegun"] =  0.00,--Shouldn't fire, but if it did I don't want it to shoot at something that has 2 doors
       ["minigun"] =     0.29,--Base AI has this quite high, Lowered bc sandbags are not counted
-      ["sniper"] =      0.01,--Note, this does nothing for sniper or machinegun, already does no damage.
+      ["sniper"] =      0.05,--Note, this does nothing for sniper or machinegun, already does no damage.
       ["sniper2"] =     0.04,--4% chance per update to try to hit a wild shot or if it has no target it takes ~ 1s to fire
       ["mortar"] =      0.15,--Can ignite gunners   
       ["mortar2"] =     0.25,--Can dig a hole for future mortars
