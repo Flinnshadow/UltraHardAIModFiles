@@ -2050,7 +2050,7 @@ function TryFireGun(id, useGroup,index)
 	end
 	
 	local teamResources = GetTeamResources(teamId)
-	if not CanAfford(teamResources - GetWeaponFireCost(id)) then
+	if not CanAfford(teamResources - WeaponFireCosts[type]) then
 		--LogDetail("can't afford to fire weapon: resources = " .. teamResources .. ", cost = " .. GetWeaponFireCost(id))
 		TryCloseWeaponGroupDoors(group)
 		return
