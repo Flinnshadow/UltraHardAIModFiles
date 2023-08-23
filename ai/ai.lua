@@ -1223,7 +1223,6 @@ function RemoveDeviceFromEnemySide(id,saveName)
   --Log("AI team: "..teamId.."Enemy: "..enemyTeamId.." "..Id.." "..saveName)
    --Log("Remove, Enemy: "..enemyTeamId.." "..id.." "..saveName)
    for i=1,#data.DevicesOnEnemyTeam[saveName] do
-      if data.DevicesOnEnemyTeam[saveName][i] == id then table.remove(data.DevicesOnEnemyTeam,i) return end
       if data.DevicesOnEnemyTeam[saveName][i] == id then
 		   table.remove(data.DevicesOnEnemyTeam[saveName],i)
 		   return
@@ -1664,7 +1663,9 @@ function FindPriorityTarget(weaponId, type, _, needLineOfSight, needLineToStruct
       end
    end
    --Log("Firing at " .. (bestTarget or "nothing"))
-   if #bestTarget > 0 then data.FailedAttempts[weaponId] = 0 end
+   if #bestTarget > 0 then
+      data.FailedAttempts[weaponId] = 0
+   else return nil end
    return bestTarget[GetRandomInteger(1, #bestTarget, "FindPriorityTarget " .. bestTarget[1].x)]
 
   --TargetRandom = RandomFloat%0.000001*1000000+0.01
