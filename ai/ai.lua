@@ -111,6 +111,7 @@ data.ProjectileHitpoints["rocket"] = 0
 data.ProjectileHitpoints["firebeam"] = 0
 data.ProjectileHitpoints["buzzsaw"] = 40*19
 data.ProjectileHitpoints["shotgun"] = 160
+data.ProjectileHitPoints["sniper2"] = 650
 
 data.AntiAirLateralStdDev =
 {
@@ -247,6 +248,8 @@ WeaponFiresLobbedProjectile =
 
 data.OffensiveFireProbability["sniper"] = 1
 data.OffensiveFireProbability["machinegun"] = 0
+
+data.FailedAttempts = {}
 
 for k, v in pairs(FireErrorStdDev) do
   FireErrorStdDev[k] = 0
@@ -458,7 +461,7 @@ function UpdateWeapon(index)
 		end]]
 
 		if TableLength(data.ActionQueue) > 0 and data.ActionQueue[id] == nil then
-         Log("return F")
+         --Log("return F")
 			return false
 		end
 		
@@ -472,7 +475,7 @@ function UpdateWeapon(index)
 				probability = data.StarvedProbabilityFactor*probability
 			end
 			if GetRandomFloat(0,1, "UpdateWeapon " .. id) > probability then
-            Log("RS")
+            --Log("RS")
 				--LogDetail("Avoiding fire of " .. type .. " during " .. context .. ", probability " .. probability)
 				return false
 			end
@@ -1207,8 +1210,6 @@ for i=1,#AllTypesOfDevicesAndWeapons do
   data.DevicesOnEnemyTeam[AllTypesOfDevicesAndWeapons[i]] = {}
 end
 
-EnableHumanAssist = function() end
-
 function AddDeviceToEnemySide(id,saveName)
   --Log("adtes")
   --Log("AI team: "..teamId.."Enemy: "..enemyTeamId.." "..Id.." "..saveName)
@@ -1423,78 +1424,251 @@ function FindPriorityTarget(weaponId, type, _, needLineOfSight, needLineToStruct
 
   local MaxPriority = 0
   local bestTarget = nil
-  local hitpoints = data.ProjectileHitpoints[type]
+  --Log("FailedAttempts: " .. (data.FailedAttempts[weaponId] or 0))
+  local balls = (data.FailedAttempts[weaponId] or 0)
+  local hitpoints = data.ProjectileHitpoints[type] * 1.05 ^ balls * (0.07*balls + 1)
+  local apple = GetRandomFloat(0,1,"WeaponFireTypeProbabilities"..weaponId)
+   local apple2 = GetDeviceType(weaponId)
+   if data.WeaponFireTypeProbabilities.FireAtCoreProbability[apple2] < apple then
+      --Log("fire Normaly")
 
-  for k=1,#priorities[type] do
-     if priorities[type][k][2] < 0 then continue end -- don't cast ray if direct hit has negative priority
-     if MaxPriority > priorities[type][k][2] and MaxPriority > priorities[type][k][3] then break end
-     for key, targetId in pairs(data.DevicesOnEnemyTeam[priorities[type][k][1]]) do
-        -- Get obstructed w priorities[WeaponTable.saveName][k][2] and priorities[WeaponTable.saveName][k][3]
-        -- Max Priority = obs return 1
-        -- Target - obs return 2
-        local targetPos = GetDeviceCentrePosition(targetId)
-        local targetType = GetDeviceType(targetId)
-        if data.GroundDevices[targetType] then
-           targetPos = Vec3(targetPos.x, targetPos.y + data.GroundDevices[targetType], targetPos.z)
-           if ShowObstructionRays then SpawnCircle(targetPos, 10, Blue(92), 5) end
-        end
-        local targetPriority = 0
-        -- IsTargetObstructed(<weaponId>, <type>, <position of target>, <hitpoints>)
-        -- dmgDealt is 100% - HP left of target after hitting (only relevant when splash damage is dealt)
+      for k=1,#priorities[type] do
+         if priorities[type][k][2] < 0 then continue end -- don't cast ray if direct hit has negative priority
+         if MaxPriority > priorities[type][k][2] and MaxPriority > priorities[type][k][3] then break end
+         for key, targetId in pairs(data.DevicesOnEnemyTeam[priorities[type][k][1]]) do
+            -- Get obstructed w priorities[WeaponTable.saveName][k][2] and priorities[WeaponTable.saveName][k][3]
+            -- Max Priority = obs return 1
+            -- Target - obs return 2
+            local targetPos = GetDeviceCentrePosition(targetId)
+            local targetType = GetDeviceType(targetId)
+            if data.GroundDevices[targetType] then
+               targetPos = Vec3(targetPos.x, targetPos.y + data.GroundDevices[targetType], targetPos.z)
+               if ShowObstructionRays then SpawnCircle(targetPos, 10, Blue(92), 5) end
+            end
+            local targetPriority = 0
+            -- IsTargetObstructed(<weaponId>, <type>, <position of target>, <hitpoints>)
+            -- dmgDealt is 100% - HP left of target after hitting (only relevant when splash damage is dealt)
 
-        LogLower("Checking target " .. targetType .. " " .. targetId)
-        local targetObstructed, dmgDealt = IsTargetObstructed(weaponId, type, targetPos, hitpoints,needLineOfSight,needLineToStructure, targetId)
-        LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
-        
-        if not targetObstructed then
-           if dmgDealt then
-              targetPriority = priorities[type][k][3] * dmgDealt
-           else
-              targetPriority = priorities[type][k][2]
-           end
-           LogLower("MaxPriority: " .. MaxPriority .. ", targetPriority: " .. targetPriority)
-           if MaxPriority < targetPriority then
-              MaxPriority = targetPriority
-              bestTarget = targetPos
-           end
-        end
-     end
-  end
+            LogLower("Checking target " .. targetType .. " " .. targetId)
+            local targetObstructed, dmgDealt = IsTargetObstructed(weaponId, type, targetPos, hitpoints,needLineOfSight,needLineToStructure, targetId)
+            LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
+            
+            if not targetObstructed then
+               if dmgDealt then
+                  targetPriority = priorities[type][k][3] * dmgDealt
+               else
+                  targetPriority = priorities[type][k][2]
+               end
+               LogLower("MaxPriority: " .. MaxPriority .. ", targetPriority: " .. targetPriority)
+               if MaxPriority < targetPriority then
+                  MaxPriority = targetPriority
+                  bestTarget = targetPos
+               end
+            end
+         end
+      end
+      if bestTarget == nil then
+         data.FailedAttempts[weaponId] = (data.FailedAttempts[weaponId] or 0) + 0.1
+      end
+   elseif data.WeaponFireTypeProbabilities.FireAtRandomTargetProbability[apple2] < apple then
+      --Log("fire At Core")
+      for key, targetId in pairs(data.DevicesOnEnemyTeam["reactor"]) do
+         -- Get obstructed w priorities[WeaponTable.saveName][k][2] and priorities[WeaponTable.saveName][k][3]
+         -- Max Priority = obs return 1
+         -- Target - obs return 2
+         local targetPos = GetDeviceCentrePosition(targetId)
+         local targetType = GetDeviceType(targetId)
+         if data.GroundDevices[targetType] then
+            targetPos = Vec3(targetPos.x, targetPos.y + data.GroundDevices[targetType], targetPos.z)
+            if ShowObstructionRays then SpawnCircle(targetPos, 10, Blue(92), 5) end
+         end
+         local targetPriority = 0
+         -- IsTargetObstructed(<weaponId>, <type>, <position of target>, <hitpoints>)
+         -- dmgDealt is 100% - HP left of target after hitting (only relevant when splash damage is dealt)
 
-  return bestTarget
-  --[[for key, value in pairs(data.DevicesOnEnemyTeam.Cores) do -- If a weapon has a shot on a enemy core then take it.
-     --FireRay
-  end]]
-  --[[if WeaponTable.currentTarget then -- if there is a target from a previous shot, interation of this function or if another weapon is requesting fire to a target then use it as the target
-     if not doorcall then
-        return WeaponTable.currentTarget
-     else
-        if WeaponRetargetsWhileOpeningDoorsChance[WeaponTable.saveName] < RandomFloat%0.0001*10000+0.01 then
-           return WeaponTable.currentTarget -- TODO: make sure to add a check for this table to see if the typing is still valid (exposed weapon is still an exposed weapon.)
-        end
-     end
-  end 
-  TargetRandom = RandomFloat%0.000001*1000000+0.01
-  if WeaponPriorities[WeaponTable.saveName].ExposedWeapons > TargetRandom then
-     for key, value in pairs(data.DevicesOnEnemyTeam.Weapons) do -- If a weapon has a shot on a enemy core then take it.
-        --FireRay
-        -- if no valid target then continue, else return the target of most value + randomseed
-     end
-  end]]
+         LogLower("Checking target " .. targetType .. " " .. targetId)
+         local targetObstructed, dmgDealt = IsTargetObstructed(weaponId, type, targetPos, hitpoints,needLineOfSight,needLineToStructure, targetId,{direct=100,splash=1})
+         LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
+         
+         if not targetObstructed then
+            return targetPos
+         end
+      end
+      return targetPos 
+   elseif data.WeaponFireTypeProbabilities.FireAtRandomTargetWithExtraDamageProbability[apple2] < apple then
+      --Log("fire At RandomTarget")
+      local i=10
+      repeat
+         for key, targetId in pairs(data.DevicesOnEnemyTeam[AllTypesOfDevicesAndWeapons[GetRandomInteger(1,#AllTypesOfDevicesAndWeapons,"randomDevice"..i)]]) do
+            -- Get obstructed w priorities[WeaponTable.saveName][k][2] and priorities[WeaponTable.saveName][k][3]
+            -- Max Priority = obs return 1
+            -- Target - obs return 2
+            local targetPos = GetDeviceCentrePosition(targetId)
+            local targetType = GetDeviceType(targetId)
+            if data.GroundDevices[targetType] then
+               targetPos = Vec3(targetPos.x, targetPos.y + data.GroundDevices[targetType], targetPos.z)
+               if ShowObstructionRays then SpawnCircle(targetPos, 10, Blue(92), 5) end
+            end
+            local targetPriority = 0
+            -- IsTargetObstructed(<weaponId>, <type>, <position of target>, <hitpoints>)
+            -- dmgDealt is 100% - HP left of target after hitting (only relevant when splash damage is dealt)
+   
+            LogLower("Checking target " .. targetType .. " " .. targetId)
+            local targetObstructed, dmgDealt = IsTargetObstructed(weaponId, type, targetPos, hitpoints,needLineOfSight,needLineToStructure, targetId)
+            LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
+            
+            if not targetObstructed then
+               return targetPos
+               --[[if dmgDealt then
+                  targetPriority = priorities[type][k][3] * dmgDealt
+               else
+                  targetPriority = priorities[type][k][2]
+               end
+               return targetPos
+               LogLower("MaxPriority: " .. MaxPriority .. ", targetPriority: " .. targetPriority)
+               if MaxPriority < targetPriority then
+                  MaxPriority = targetPriority
+                  bestTarget = targetPos
+               end]]
+            end
+         end
+         i=i-1
+      until i==0
+
+   elseif data.WeaponFireTypeProbabilities.FireAtPriorityTargetWithExtraDamageProbability[apple2] < apple then
+      --Log("fire At RandomTarget +")
+      local i=10
+      repeat
+         for key, targetId in pairs(data.DevicesOnEnemyTeam[AllTypesOfDevicesAndWeapons[GetRandomInteger(1,#AllTypesOfDevicesAndWeapons,"randomDevice"..i)]]) do
+            -- Get obstructed w priorities[WeaponTable.saveName][k][2] and priorities[WeaponTable.saveName][k][3]
+            -- Max Priority = obs return 1
+            -- Target - obs return 2
+            local targetPos = GetDeviceCentrePosition(targetId)
+            local targetType = GetDeviceType(targetId)
+            if data.GroundDevices[targetType] then
+               targetPos = Vec3(targetPos.x, targetPos.y + data.GroundDevices[targetType], targetPos.z)
+               if ShowObstructionRays then SpawnCircle(targetPos, 10, Blue(92), 5) end
+            end
+            local targetPriority = 0
+            -- IsTargetObstructed(<weaponId>, <type>, <position of target>, <hitpoints>)
+            -- dmgDealt is 100% - HP left of target after hitting (only relevant when splash damage is dealt)
+   
+            LogLower("Checking target " .. targetType .. " " .. targetId)
+            local targetObstructed, dmgDealt = IsTargetObstructed(weaponId, type, targetPos, hitpoints,needLineOfSight,needLineToStructure, targetId,{direct = 1.6,splash = 1})
+            LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
+            
+            if not targetObstructed then
+               return targetPos
+               --[[if dmgDealt then
+                  targetPriority = priorities[type][k][3] * dmgDealt
+               else
+                  targetPriority = priorities[type][k][2]
+               end
+               return targetPos
+               LogLower("MaxPriority: " .. MaxPriority .. ", targetPriority: " .. targetPriority)
+               if MaxPriority < targetPriority then
+                  MaxPriority = targetPriority
+                  bestTarget = targetPos
+               end]]
+            end
+         end
+         i=i-1
+      until i==0
+
+   elseif data.WeaponFireTypeProbabilities.FireAtPriorityTargetWithExtraSplashProbability[apple2] < apple then
+      --Log("fire At Prio Target +")
+      for k=1,#priorities[type] do
+         if priorities[type][k][2] < 0 then continue end -- don't cast ray if direct hit has negative priority
+         if MaxPriority > priorities[type][k][2] and MaxPriority > priorities[type][k][3] then break end
+         for key, targetId in pairs(data.DevicesOnEnemyTeam[priorities[type][k][1]]) do
+            -- Get obstructed w priorities[WeaponTable.saveName][k][2] and priorities[WeaponTable.saveName][k][3]
+            -- Max Priority = obs return 1
+            -- Target - obs return 2
+            local targetPos = GetDeviceCentrePosition(targetId)
+            local targetType = GetDeviceType(targetId)
+            if data.GroundDevices[targetType] then
+               targetPos = Vec3(targetPos.x, targetPos.y + data.GroundDevices[targetType], targetPos.z)
+               if ShowObstructionRays then SpawnCircle(targetPos, 10, Blue(92), 5) end
+            end
+            local targetPriority = 0
+            -- IsTargetObstructed(<weaponId>, <type>, <position of target>, <hitpoints>)
+            -- dmgDealt is 100% - HP left of target after hitting (only relevant when splash damage is dealt)
+
+            LogLower("Checking target " .. targetType .. " " .. targetId)
+            local targetObstructed, dmgDealt = IsTargetObstructed(weaponId, type, targetPos, hitpoints,needLineOfSight,needLineToStructure, targetId,{direct = 1.6,splash = 1})
+            LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
+            
+            if not targetObstructed then
+               if dmgDealt then
+                  targetPriority = priorities[type][k][3] * dmgDealt
+               else
+                  targetPriority = priorities[type][k][2]
+               end
+               LogLower("MaxPriority: " .. MaxPriority .. ", targetPriority: " .. targetPriority)
+               if MaxPriority < targetPriority then
+                  MaxPriority = targetPriority
+                  bestTarget = targetPos
+               end
+            end
+         end
+      end
+      if bestTarget == nil then
+         data.FailedAttempts[weaponId] = (data.FailedAttempts[weaponId] or 0) + 1
+      end
+   else
+      --Log("fire At Prio Target +Splash")
+      for k=1,#priorities[type] do
+         if priorities[type][k][2] < 0 then continue end -- don't cast ray if direct hit has negative priority
+         if MaxPriority > priorities[type][k][2] and MaxPriority > priorities[type][k][3] then break end
+         for key, targetId in pairs(data.DevicesOnEnemyTeam[priorities[type][k][1]]) do
+            -- Get obstructed w priorities[WeaponTable.saveName][k][2] and priorities[WeaponTable.saveName][k][3]
+            -- Max Priority = obs return 1
+            -- Target - obs return 2
+            local targetPos = GetDeviceCentrePosition(targetId)
+            local targetType = GetDeviceType(targetId)
+            if data.GroundDevices[targetType] then
+               targetPos = Vec3(targetPos.x, targetPos.y + data.GroundDevices[targetType], targetPos.z)
+               if ShowObstructionRays then SpawnCircle(targetPos, 10, Blue(92), 5) end
+            end
+            local targetPriority = 0
+            -- IsTargetObstructed(<weaponId>, <type>, <position of target>, <hitpoints>)
+            -- dmgDealt is 100% - HP left of target after hitting (only relevant when splash damage is dealt)
+
+            LogLower("Checking target " .. targetType .. " " .. targetId)
+            local targetObstructed, dmgDealt = IsTargetObstructed(weaponId, type, targetPos, hitpoints,needLineOfSight,needLineToStructure, targetId,{direct = 1,splash = 2})
+            LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
+            
+            if not targetObstructed then
+               if dmgDealt then
+                  targetPriority = priorities[type][k][3] * dmgDealt
+               else
+                  targetPriority = priorities[type][k][2]
+               end
+               LogLower("MaxPriority: " .. MaxPriority .. ", targetPriority: " .. targetPriority)
+               if MaxPriority < targetPriority then
+                  MaxPriority = targetPriority
+                  bestTarget = targetPos
+               end
+            end
+         end
+      end
+      if bestTarget == nil then
+         data.FailedAttempts[weaponId] = (data.FailedAttempts[weaponId] or 0) + 1
+      end
+   end
+   --Log("Firing at " .. (bestTarget or "nothing"))
+   if bestTarget then data.FailedAttempts[weaponId] = 0 end
+   return bestTarget
+
+  --TargetRandom = RandomFloat%0.000001*1000000+0.01
+
 end
-function OnDeviceHit(teamId, deviceId, saveName, newHealth, projectileNodeId, projectileTeamId, pos, reflectedByEnemy)
-  --if saveName == "reactor" then BetterLog(data.DevicesOnEnemyTeam) end
-end
---[[WeaponPriorities =
-{
-  ["sniper"] = {ExposedWeapons = 0.9,ExposedDevices = 0.99,SplashibleWeapons = 1.1,SplashibleDevices = 1.1,CoveredWeapons = 1,CoveredDevices = 1.1,Structure = 1.1}
-}]]
 
 -- returns:
 -- boolean isTargetObstructed (If true, the other 2 return values might be undefined)
 -- boolean splashRequired to hit
 -- float dmgDealt if splashRequired (formula: 1 - distanceToTarget/SplashRadius)
-function IsTargetObstructed(weaponId, weaponType, pos, hitpoints,needLineOfSight,needLineToStructure, targetId)
+function IsTargetObstructed(weaponId, weaponType, pos, hitpoints,needLineOfSight,needLineToStructure, targetId,damageMulti)
   LogLower("weaponId: " .. weaponId .. ", weaponType: " .. weaponType .. ", line of sight: " .. tostring(needLineOfSight) .. ", line to structure: " .. tostring(needLineToStructure))
   
   
@@ -1561,7 +1735,7 @@ function IsTargetObstructed(weaponId, weaponType, pos, hitpoints,needLineOfSight
         end
         	-- has line of sight
 			-- shoot ray from artificial pos to target pos to check if projectile has enough hp/splash
-			hitType, dmgDealt = CastTargetObstructionRayNew(testPos, pos, hitpoints, rayFlags, weaponType, targetId, weaponId)
+			hitType, dmgDealt = CastTargetObstructionRayNew(testPos, pos, hitpoints, rayFlags, weaponType, targetId, weaponId,damageMulti)
 
 			if hitType == data.RAY_HIT_OBSTRUCTED then return true, false end
 
@@ -1582,7 +1756,7 @@ function IsTargetObstructed(weaponId, weaponType, pos, hitpoints,needLineOfSight
 --		local hitType = CastRayFromDevice(weaponId, pos, hitpoints, rayFlags, 0)
 --		Log("Casting ray from " .. weaponType .. ", teamId: " .. teamId .. " to " .. GetDeviceType(GetDeviceIdAtPosition(pos)) .. ", pos: " .. pos)
 
-     hitType, dmgDealt = CastTargetObstructionRayNew(hardPointPos, pos, hitpoints, rayFlags, weaponType, targetId, weaponId)
+     hitType, dmgDealt = CastTargetObstructionRayNew(hardPointPos, pos, hitpoints, rayFlags, weaponType, targetId, weaponId,damageMulti)
 
      if hitType == data.RAY_HIT_OBSTRUCTED then return true, false end -- target obstructed/cannot be reached (projectileHP < 0)
 
@@ -1610,11 +1784,12 @@ end
 -- hitType of ray
 -- boolean splashRequired
 -- float dmgDealt if splashRequired (formula: 1 - distanceToTarget/SplashRadius)
-function CastTargetObstructionRayNew(source, target, hitpoints, rayFlags, weaponType, targetId, weaponId)
+function CastTargetObstructionRayNew(source, target, hitpoints, rayFlags, weaponType, targetId, weaponId,damageMulti)
+   local damageMulti = damageMulti or {direct = 1,splash = 1}
   local hitType
   local hitSaveName
      local teamHit
-  local projectileHP = hitpoints
+  local projectileHP = hitpoints*damageMulti.direct or hitpoints
   --LogLower("Start of ray casting, projectileHP " .. projectileHP)
   -- offset new ray starting position of ray every loop
   local rayVec = target - source
@@ -1646,6 +1821,10 @@ function CastTargetObstructionRayNew(source, target, hitpoints, rayFlags, weapon
   
      if hitType == RAY_HIT_DEVICE then
         local deviceId = GetRayHitDeviceId()
+        if deviceId ~= weaponId and teamHit%MAX_SIDES == teamId%MAX_SIDES then
+            -- hitting friendly device
+            return data.RAY_HIT_OBSTRUCTED, 0
+        end
         if deviceId ~= targetId and deviceId ~= weaponId and not (weaponType == "minigun" and GetDeviceType(deviceId) == "sandbags") then
            --LogLower("Ray hit " .. GetDeviceType(deviceId))
            projectileHP = projectileHP - GetDeviceHitpoints(deviceId)
@@ -1691,7 +1870,7 @@ function CastTargetObstructionRayNew(source, target, hitpoints, rayFlags, weapon
      if data.ProjectileSplash[weaponType] then
         local distance = Vec3Length(target - GetRayHitPosition())
         if ShowObstructionRays then SpawnCircle(GetRayHitPosition(), data.ProjectileSplash[weaponType], Red(92), 5) end
-        local dmgDealt = 1 - distance / data.ProjectileSplash[weaponType]
+        local dmgDealt = 1 - distance / (data.ProjectileSplash[weaponType]*damageMulti.direct or data.ProjectileSplash[weaponType]*damageMulti.splash or data.ProjectileSplash[weaponType])
         if dmgDealt > 0 then return RAY_HIT_WEAPON, dmgDealt end
      end
 
@@ -1700,7 +1879,7 @@ function CastTargetObstructionRayNew(source, target, hitpoints, rayFlags, weapon
 
   return hitType, false
 end
-
+--[[
 -- Back turbine targeting fix
 function TargetObstructed(weaponId, weaponType, pos, hitpoints, needLineOfSight, needLineToStructure)
   --Log("weaponId: " .. weaponId .. ", weaponType: " .. weaponType .. ", line of sight: " .. tostring(needLineOfSight) .. ", line to structure: " .. tostring(needLineToStructure))
@@ -1796,7 +1975,7 @@ function TargetObstructed(weaponId, weaponType, pos, hitpoints, needLineOfSight,
   end
   return true
 end
-
+]]
 function comparePositions(pos1, pos2)
   return (pos1.x == pos2.x and pos1.y == pos2.y)
 end
@@ -1930,7 +2109,7 @@ function TryFireGun(id, useGroup,index)
 				elseif result == FIRE_DOOR then
 					--LogDetail("  Door hit, retry single weapon " .. gid)
 					-- door will be opening, try again soon
-					ScheduleCall(data.GroupDoorOpenDelay, TryFireGun, gid,index)
+					ScheduleCall(data.GroupDoorOpenDelay, TryFireGun, gid, group, index)
 				else
 					--LogError(FIRE[result] .. ": close doors after failure")
 					TryCloseWeaponDoorsWithDelay(gid, "TryFireGun 3 door ")
@@ -2625,6 +2804,31 @@ end
 
 data.WeaponFireTypeProbabilities = -- when fireing, it will roll a number, then go backwards if Core% is higher then the rolled number, eventually hitting the spetial right prio type.
 {                                                              --Note, When a spetial type is rolled, the weapon marks the type then for future fire weapon attempts it will use it. (so weapons won't open then close their doors)
+   FireAtPriorityTargetWithExtraSplashProbability =
+   {
+      ["machinegun"] =  0.00,
+      ["minigun"] =     0.00,
+      ["sniper"] =      0.00,
+      ["sniper2"] =     0.00,
+      ["mortar"] =      0.06,
+      ["mortar2"] =     0.08,
+      ["missile"] =     0.00,
+      ["missile2"] =    0.05,
+      ["missileinv"] =  0.00,
+      ["missile2inv"] = 0.06,
+      ["cannon"] =      0.08,
+      ["laser"] =       0.00,
+      ["flak"] =        0.00,
+      ["shotgun"] =     0.00,
+      ["rocketemp"] =   0.06,
+      ["rocket"] =      0.08,
+      ["firebeam"] =    0.06,
+      ["cannon20mm"] =  0.03,
+      ["buzzsaw"] =     0.10,
+      ["howitzer"] =    0.08,
+      ["magnabeam"] =   0.00,
+      ["smokebomb"] =   0.02,
+   },
    FireAtPriorityTargetWithExtraDamageProbability =            --2x damage for now
    {
       ["machinegun"] =  0.00,--Shouldn't fire, but if it did I don't want it to shoot at something that has 2 doors
@@ -2632,17 +2836,17 @@ data.WeaponFireTypeProbabilities = -- when fireing, it will roll a number, then 
       ["sniper"] =      0.01,--Note, this does nothing for sniper or machinegun, already does no damage.
       ["sniper2"] =     0.04,--4% chance per update to try to hit a wild shot or if it has no target it takes ~ 1s to fire
       ["mortar"] =      0.15,--Can ignite gunners   
-      ["mortar2"] =     0.30,--Can dig a hole for future mortars
+      ["mortar2"] =     0.25,--Can dig a hole for future mortars
       ["missile"] =     0.20,--Good for digging, but importently, rng will cause it to randomly hit stuff from above TODO: Make swarms have hitpoints when we do the raycast
       ["missile2"] =    0.34,--Will mostly hit the core but its quite importent that it fires into thicc wood so it can do stuff 
       ["missileinv"] =  0.25,--higer so they can hit platforms more
-      ["missile2inv"] = 0,35, 
+      ["missile2inv"] = 0.35, 
       ["cannon"] =      0.10,--No reason for this too be too high, If it has no target and no other spetial priorities, it will fire after ~0.4th of a second
       ["laser"] =       0.16,--This is higher then the cannon because it has no splash, but still not to high, it can get door snipes
       ["flak"] =        0.00,--Never fire, and it does -1 damage anyways  
       ["shotgun"] =     0.20,--It already fires at stuff throgh 1 door
       ["rocketemp"] =   0.05,--Note, While this does no bonus to the hitpoints it will increace the splash radius, only good for RNG rolls
-      ["rocket"] =      0.34,--Same idea, but it can actualy allow for punch through with additinal fireing
+      ["rocket"] =      0.29,--Same idea, but it can actualy allow for punch through with additinal fireing
       ["firebeam"] =    0.28,--Only "low" becuase the other probs are high 
       ["cannon20mm"] =  0.24,--Its ok to fire this most anywhere.
       ["buzzsaw"] =     0.09,--Trying not to make buzzsaws too op :sweating:
@@ -2712,13 +2916,13 @@ data.WeaponFireTypeProbabilities = -- when fireing, it will roll a number, then 
       ["missile2"] =    0.10,--yes
       ["missileinv"] =  0.01,
       ["missile2inv"] = 0.10,
-      ["cannon"] =      0.02,-- don't waste shots
-      ["laser"] =       0.01,
+      ["cannon"] =      0.05,-- don't waste shots
+      ["laser"] =       0.02,
       ["flak"] =        0.03,
       ["shotgun"] =     0.07,
       ["rocketemp"] =   0.04,
       ["rocket"] =      0.11,--yes
-      ["firebeam"] =    0.22,--allows for more weapons to recognise this as a oppertunity via 2x damage mode
+      ["firebeam"] =    0.23,--allows for more weapons to recognise this as a oppertunity via 2x damage mode
       ["cannon20mm"] =  0.06,--Basicly never a terrible idea, none of the shots should miss
       ["buzzsaw"] =     0.09,--:)
       ["howitzer"] =    0.11,--yes
@@ -2729,9 +2933,13 @@ data.WeaponFireTypeProbabilities = -- when fireing, it will roll a number, then 
 -- Add probs up to == 1 max (this will mean it will never fire normaly), if the overall probebility is > 1 then fire at core will loose probibilty == to added probibilty on other types
 -- 
 -- also, imagine useing a loop for this, lol
+for key, value in pairs(data.WeaponFireTypeProbabilities.FireAtPriorityTargetWithExtraDamageProbability) do
+   data.WeaponFireTypeProbabilities.FireAtPriorityTargetWithExtraDamageProbability[key] = value + data.WeaponFireTypeProbabilities.FireAtPriorityTargetWithExtraSplashProbability[key]
+end
+
 for key, value in pairs(data.WeaponFireTypeProbabilities.FireAtRandomTargetWithExtraDamageProbability) do
    data.WeaponFireTypeProbabilities.FireAtRandomTargetWithExtraDamageProbability[key] = value + data.WeaponFireTypeProbabilities.FireAtPriorityTargetWithExtraDamageProbability[key]
-end 
+end
 
 for key, value in pairs(data.WeaponFireTypeProbabilities.FireAtRandomTargetProbability) do
    data.WeaponFireTypeProbabilities.FireAtRandomTargetProbability[key] = value + data.WeaponFireTypeProbabilities.FireAtRandomTargetWithExtraDamageProbability[key]
@@ -2740,8 +2948,7 @@ end
 for key, value in pairs(data.WeaponFireTypeProbabilities.FireAtCoreProbability) do
    data.WeaponFireTypeProbabilities.FireAtCoreProbability[key] = value + data.WeaponFireTypeProbabilities.FireAtRandomTargetProbability[key]
 end 
-
---BetterLog(data) -- whao who, wonder what this does
+--BetterLog(data.WeaponFireTypeProbabilities)
 ExcludedDevices = {"sandbags","reactor"}
 function AddCoreToPriorities()
   --Log("AddCore start")
@@ -3116,41 +3323,41 @@ priorities = {
  },
 
  ["cannon"] = {
-    {"howitzer", 100, 60},
-    {"cannon", 100, 50},
-    {"laser", 100, 50},
-    {"missile2", 95, -1},
-    {"missile2inv", 95, -1},
-    {"missile", 93, -1},
-    {"missileinv", 93, -1},
-    {"munitions", 92, 15},
-    {"factory", 92, 15},
-    {"upgrade", 92, -1},
-    {"workshop", 91, -1},
-    {"armoury", 91, -1},
-    {"cannon20mm", 90, 30},
-    {"firebeam", 80, 35},
-    {"magnabeam", 80, 10},
-    {"barrel", 30, 80,},
-    {"battery", 75, 50},
-    {"mine2", 71, -1},
-    {"mortar2", 71, 50},
-    {"mortar", 70, 50},
-    {"mine", 70, -1},
-    {"turbine2", 59, 20},
-    {"turbine", 58, -1},
-    {"rocketemp", 55, 50},
-    {"store", 55, -1},
-    {"rocket", 50, 25},
-    {"smokebomb", 50, -1},
-    {"shotgun", 20, 15},
-    {"buzzsaw", 15, -1},
-    {"minigun", 4, 20,},
-    {"sniper2", 4, 15},
-    {"flak", 3, 15},
-    {"sniper", 2, 10},
-    {"repairstation", 1, -1},
-    {"machinegun", -1, -1}, -- never fire cannon at machine gun
+   {"howitzer", 100, 60},
+   {"cannon", 100, 50},
+   {"laser", 100, 50},
+   {"missile2", 95, -1},
+   {"missile2inv", 95, -1},
+   {"missile", 93, -1},
+   {"missileinv", 93, -1},
+   {"munitions", 92, 15},
+   {"factory", 92, 15},
+   {"upgrade", 92, -1},
+   {"workshop", 91, -1},
+   {"armoury", 91, -1},
+   {"cannon20mm", 90, 30},
+   {"firebeam", 80, 35},
+   {"magnabeam", 80, 10},
+   {"barrel", 30, 80,},
+   {"battery", 75, 50},
+   {"mine2", 71, -1},
+   {"mortar2", 71, 50},
+   {"mortar", 70, 50},
+   {"mine", 70, -1},
+   {"turbine2", 59, 20},
+   {"turbine", 58, -1},
+   {"rocketemp", 55, 50},
+   {"store", 55, -1},
+   {"rocket", 50, 25},
+   {"smokebomb", 50, -1},
+   {"shotgun", 20, 15},
+   {"buzzsaw", 15, -1},
+   {"minigun", 4, 20,},
+   {"sniper2", 4, 15},
+   {"flak", 3, 15},
+   {"sniper", 2, 10},
+   {"repairstation", 1, -1},
+   {"machinegun", -1, -1}, -- never fire cannon at machine gun
  },
 
  ["laser"] = {
