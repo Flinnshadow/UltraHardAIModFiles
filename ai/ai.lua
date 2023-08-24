@@ -133,7 +133,7 @@ data.DoorCloseDelayMax = 0.05
 data.NoTargetCloseDoorDelay = 0.1
 data.GroupDoorOpenDelay = 0
 data.MissileDoorFireDelay = 0.1
-data.RepairPeriod = 0
+data.RepairPeriod = 0.05
 --data.ReplaceDeviceDelayMin = 0
 --data.ReplaceDeviceDelayMax = 0.05 Hard coded
 data.MissileAimingDelay = 0
@@ -1453,14 +1453,19 @@ function TryFireWeapon(WeaponTable,doorcall,RandomFloat)
         --PaintTarget(group, currentTarget)
 end]]
 
-function Repair()
 
+function Repair()
 	-- put out any fires if we are the winner
 	if data.gameWinner and data.gameWinner ~= teamId then return end
+      data.repairDamageThreshold = 1
+      data.repairDamageThresholdDevice = 1
 
-   EnumerateLinks(teamId, "RepairEnumeratedLink", 1, 1, "", false)
+		--linkRepairCount = 0
+		EnumerateLinks(teamId, "RepairEnumeratedLink", data.repairDamageThreshold, data.repairDamageThresholdDevice, "", false)
 
--- Repair ground devices separately as these won't be found in the link enumeration above
+	--end
+
+	-- Repair ground devices separately as these won't be found in the link enumeration above
    local deviceCount = GetDeviceCount(teamId)
    for index = 0,deviceCount - 1 do
       local id = GetDeviceId(teamId, index)
@@ -1472,14 +1477,58 @@ function Repair()
    end
 
 	if data.gameEnded then return end
+	
 	ScheduleCall(data.RepairPeriod, Repair)
 end
 
+function RepairEnumeratedLink(nodeA, nodeB, saveName, relativeHealth, stress, segmentsOnFire, deviceId)
+	if relativeHealth < data.repairDamageThreshold or segmentsOnFire > 0 then
+		if nodeA and nodeB then
+			RepairLink(nodeA, nodeB)
+			--linkRepairCount = linkRepairCount + 1
+		end
+	end
+	if deviceId > 0 and not data.MissileLaunching[deviceId] then
+		RepairDevice(deviceId)
+	end
+	
+	-- continue enumeration
+	return true
+end
 --base = GetRealTime()
 --if teamId == 102 then Log(""..GetRealTime() - base) end
-function FindPriorityTarget(weaponId, type, _, needLineOfSight, needLineToStructure) -- door call can be in curr target?
+--[[
+function FindTarget(weaponId, type)
+	--LogFunction("FindTarget " .. weaponId .. ", " .. (type or "nil"))
+	if data.CustomWeaponPriorities[type] then
+		return FindTargetFromPriorities(weaponId, type, data.CustomWeaponPriorities[type])
+	elseif IsHeavyWeapon[type] then
+		return FindTargetFromPriorities(weaponId, type, data.HeavyArmsPrioritiesOverride or HeavyArmsPriorities)
+	else
+		return FindTargetFromPriorities(weaponId, type, data.SmallArmsPrioritiesOverride or SmallArmsPriorities)
+	end
+end
+
+function FindTargetFromPriorities(weaponId, type, priorities)
+	local firesIndirect = WeaponFiresIndirect[type]
+	local target = FindPriorityTarget(weaponId, type, priorities, not firesIndirect, not firesIndirect)
+	if target or firesIndirect then
+		return target
+	else
+		-- if unable to find a target that would receive direct damage, aim at any desired target with structure in the ways
+		return FindPriorityTarget(weaponId, type, priorities, false, true)
+	end
+	return nil
+end]]
+
+-- find target prios and find priority target \/ REPLACED WITH \/  (no more priorities param)
+function FindTarget(weaponId, type)
+
+	local firesIndirect = WeaponFiresIndirect[type]
+   needLineOfSight, needLineToStructure = not firesIndirect, not firesIndirect
+   
   if not priorities[type] then Log("Weapon \"" .. type .. "\" has no target priority list. Aborting fire.") return end
-  LogLower("Finding target for " .. type .. "with id " .. weaponId)
+  --LogLower("Finding target for " .. type .. "with id " .. weaponId)
 
   local MaxPriority = 0
   local bestTarget = {}
@@ -1736,7 +1785,7 @@ end
 -- boolean splashRequired to hit
 -- float dmgDealt if splashRequired (formula: 1 - distanceToTarget/SplashRadius)
 function IsTargetObstructed(weaponId, weaponType, pos, hitpoints,needLineOfSight,needLineToStructure, targetId,damageMulti)
-  LogLower("weaponId: " .. weaponId .. ", weaponType: " .. weaponType .. ", line of sight: " .. tostring(needLineOfSight) .. ", line to structure: " .. tostring(needLineToStructure))
+  --LogLower("weaponId: " .. weaponId .. ", weaponType: " .. weaponType .. ", line of sight: " .. tostring(needLineOfSight) .. ", line to structure: " .. tostring(needLineToStructure))
   
   
   -- Ray casting fix by @cronkhinator (Discord ID: 165842061055098880)
@@ -1827,13 +1876,11 @@ function IsTargetObstructed(weaponId, weaponType, pos, hitpoints,needLineOfSight
 
      if hitType == data.RAY_HIT_OBSTRUCTED then return true, false end -- target obstructed/cannot be reached (projectileHP < 0)
 
-     LogEnum("cast ray " .. RAY_HIT[hitType] .. " team " .. GetRayHitSideId())
      if needLineOfSight then
         if (hitType == RAY_HIT_WEAPON or hitType == RAY_HIT_DEVICE) and GetRayHitSideId()%MAX_SIDES == enemyTeamId and CastGroundRayFromWeapon(weaponId, pos, TERRAIN_PROJECTILE) == 0  then
            return false, dmgDealt
         end
      else
-        LogDetail("hitType " .. hitType .. ", hit team " .. GetRayHitSideId())
         if hitType ~= RAY_HIT_TERRAIN and GetRayHitTeamId()%MAX_SIDES == enemyTeamId then
            return false, dmgDealt
         end
@@ -2841,28 +2888,6 @@ function OnDoorState(teamId, nodeA, nodeB, doorState)
   else
      data.OpenDoors[nodeA .. " " .. nodeB] = true
   end
-end
-
-function RepairEnumeratedLink(nodeA, nodeB, saveName, relativeHealth, stress, segmentsOnFire, deviceId)
-  if relativeHealth < data.repairDamageThreshold or segmentsOnFire > 0 then
-     --LogEnum("repairing link: " .. (nodeA or "nil") .. ", " .. (nodeB or "nil"))
-     if nodeA and nodeB and (not data.DisableExtinguish or segmentsOnFire == 0) then
-        if data.OpenDoors[nodeA .. " " .. nodeB] ~= true then
-           RepairLink(nodeA, nodeB)
-           linkRepairCount = linkRepairCount + 1
-        end
-     end
-  end
-  if deviceId > 0
-     and not data.MissileLaunching[deviceId]
-      --[[and IsDeviceAvailable(deviceId)]]
-     and not data.ResourceStarved then
-     --LogEnum("Repairing link device " .. deviceId)
-     RepairDevice(deviceId)
-  end
-  
-  -- continue enumeration
-  return true
 end
 
 -------------------------------------------------------------
