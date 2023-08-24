@@ -75,6 +75,44 @@ function BetterLog(v)
        Log(tostring(v))
    end
 end
+
+-- Optimisation to reduce GetRandomFloat calls, check if its actualy faster in a bit
+local randomBuffer = {}
+local bufferIndex = 1
+
+-- Fills the random buffer with new random floats
+local function FillRandomBuffer(count, minRange, maxRange)
+    randomBuffer = {}
+    for i = 1, count do
+        table.insert(randomBuffer, GetRandomFloat(minRange, maxRange, "GRD: " .. data.gameFrame))
+    end
+    bufferIndex = 1
+end
+
+-- Returns a random digit using the buffer
+local function GetRandomDigit()
+    if bufferIndex > #randomBuffer then
+      Log("fill")
+        FillRandomBuffer(7, 0, 1)  -- You can adjust the buffer size and range as needed
+    end
+
+    local randomFloat = randomBuffer[bufferIndex]
+    bufferIndex = bufferIndex + 1
+
+    local _, decimalPart = math.modf(randomFloat)
+    return decimalPart
+end
+
+-- Generates a random float with the desired number of decimal places
+local function GetRandomDigits(count)
+    local randomValue = 0
+    for i = 1, count do
+        local digit = GetRandomDigit()
+        randomValue = randomValue + digit / 10^i
+    end
+    return randomValue * 10
+end
+
 offensivePhase = true -- The difficulty is always enough to enable this
 data.UpdatePeriod = 0.2
 data.UpdateAfterRebuildDelay = 0
