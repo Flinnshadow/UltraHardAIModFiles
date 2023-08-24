@@ -339,7 +339,7 @@ function UpdateAI() -- Added to remove weapon bucket variable manip
 	end]]
 
 	-- find nodes that have moved significantly from their expected positions                                                  //MOVED FOR CLARITY, from above OffensivePhase Check
-	deformedNodes = FindDeformedNodes()
+	local deformedNodes = FindDeformedNodes()
 	-- delete deformed nodes progressively
 	ProcessDeformedNodes(deformedNodes)                                                                                      --//Causes softlocks, in particular, dynamic nodes
 
@@ -1458,48 +1458,23 @@ function Repair()
 	-- put out any fires if we are the winner
 	if data.gameWinner and data.gameWinner ~= teamId then return end
 
-	if not data.Disable and (not data.DisableRepair or not data.DisableExtinguish or not data.DisableDeviceRepair) then
-		if data.DisableRepair then
-			data.repairDamageThreshold = 0 -- fires will still be reported
-		elseif data.activeBuilding then
-			data.repairDamageThreshold = data.RepairDamageThresholdNormal
-		else -- currently rebuilding fort
-			-- only repair most damaged or stressed struts & devices to save resources for rebuilding
-			data.repairDamageThreshold = data.RepairDamageThresholdRebuilding
-		end
+   EnumerateLinks(teamId, "RepairEnumeratedLink", 1, 1, "", false)
 
-		if data.DisableDeviceRepair then
-			data.repairDamageThresholdDevice = 0 -- fires will still be reported
-		elseif data.activeBuilding then
-			data.repairDamageThresholdDevice = data.RepairDamageThresholdDeviceNormal
-		else -- currently rebuilding fort
-			-- only repair most damaged or stressed struts & devices to save resources for rebuilding
-			data.repairDamageThresholdDevice = data.RepairDamageThresholdDeviceRebuilding
-		end
-
-		linkRepairCount = 0
-		EnumerateLinks(teamId, "RepairEnumeratedLink", data.repairDamageThreshold, data.repairDamageThresholdDevice, "", false)
-		if linkRepairCount > 0 then
-			LogDetail("Repaired " .. linkRepairCount .. " links")
-		end
-	end
-
-	-- Repair ground devices separately as these won't be found in the link enumeration above
-	if not data.Disable and not data.DisableDeviceRepair then
-		local deviceCount = GetDeviceCount(teamId)
-		for index = 0,deviceCount - 1 do
-			local id = GetDeviceId(teamId, index)
-			if IsGroundDevice(id) and GetDeviceHealth(id) <= data.repairDamageThresholdDevice then
-				-- ignored if the device is not repairable
-				LogEnum("Repairing ground device " .. id)
-				RepairDevice(id)
-			end
-		end
-	end
+-- Repair ground devices separately as these won't be found in the link enumeration above
+   local deviceCount = GetDeviceCount(teamId)
+   for index = 0,deviceCount - 1 do
+      local id = GetDeviceId(teamId, index)
+      if IsGroundDevice(id) and GetDeviceHealth(id) <= data.repairDamageThresholdDevice then
+         -- ignored if the device is not repairable
+         --LogEnum("Repairing ground device " .. id)
+         RepairDevice(id)
+      end
+   end
 
 	if data.gameEnded then return end
 	ScheduleCall(data.RepairPeriod, Repair)
 end
+
 --base = GetRealTime()
 --if teamId == 102 then Log(""..GetRealTime() - base) end
 function FindPriorityTarget(weaponId, type, _, needLineOfSight, needLineToStructure) -- door call can be in curr target?
