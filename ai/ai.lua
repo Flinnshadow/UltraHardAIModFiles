@@ -1537,6 +1537,7 @@ function FindTarget(weaponId, type)
   local hitpoints = data.ProjectileHitpoints[type] * 1.05 ^ balls * (0.07*balls + 1)
   local apple = GetRandomFloat(0,1,"WeaponFireTypeProbabilities"..weaponId)
    local apple2 = GetDeviceType(weaponId)
+   local rolledForTarget = false
    if data.WeaponFireTypeProbabilities.FireAtCoreProbability[apple2] < apple then
       --Log("fire Normaly")
 
@@ -1557,9 +1558,9 @@ function FindTarget(weaponId, type)
             -- IsTargetObstructed(<weaponId>, <type>, <position of target>, <hitpoints>)
             -- dmgDealt is 100% - HP left of target after hitting (only relevant when splash damage is dealt)
 
-            LogLower("Checking target " .. targetType .. " " .. targetId)
+            --LogLower("Checking target " .. targetType .. " " .. targetId)
             local targetObstructed, dmgDealt = IsTargetObstructed(weaponId, type, targetPos, hitpoints,needLineOfSight,needLineToStructure, targetId)
-            LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
+            --LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
             
             if not targetObstructed then
                if dmgDealt then
@@ -1567,7 +1568,7 @@ function FindTarget(weaponId, type)
                else
                   targetPriority = priorities[type][k][2]
                end
-               LogLower("MaxPriority: " .. MaxPriority .. ", targetPriority: " .. targetPriority)
+               --LogLower("MaxPriority: " .. MaxPriority .. ", targetPriority: " .. targetPriority)
                if MaxPriority < targetPriority then
                   MaxPriority = targetPriority
                   bestTarget = {targetPos}
@@ -1596,15 +1597,15 @@ function FindTarget(weaponId, type)
          -- IsTargetObstructed(<weaponId>, <type>, <position of target>, <hitpoints>)
          -- dmgDealt is 100% - HP left of target after hitting (only relevant when splash damage is dealt)
 
-         LogLower("Checking target " .. targetType .. " " .. targetId)
+         --LogLower("Checking target " .. targetType .. " " .. targetId)
          local targetObstructed, dmgDealt = IsTargetObstructed(weaponId, type, targetPos, hitpoints,needLineOfSight,needLineToStructure, targetId,{direct=100,splash=1})
-         LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
+         --LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
          
          if not targetObstructed then
-            return targetPos
+            return targetPos,targetPos
          end
       end
-      return targetPos 
+      return targetPos,targetPos
    elseif data.WeaponFireTypeProbabilities.FireAtRandomTargetWithExtraDamageProbability[apple2] < apple then
       --Log("fire At RandomTarget")
       local i=10
@@ -1623,12 +1624,12 @@ function FindTarget(weaponId, type)
             -- IsTargetObstructed(<weaponId>, <type>, <position of target>, <hitpoints>)
             -- dmgDealt is 100% - HP left of target after hitting (only relevant when splash damage is dealt)
    
-            LogLower("Checking target " .. targetType .. " " .. targetId)
+            --LogLower("Checking target " .. targetType .. " " .. targetId)
             local targetObstructed, dmgDealt = IsTargetObstructed(weaponId, type, targetPos, hitpoints,needLineOfSight,needLineToStructure, targetId)
-            LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
+            --LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
             
             if not targetObstructed then
-               return targetPos
+               return targetPos,targetPos
                --[[if dmgDealt then
                   targetPriority = priorities[type][k][3] * dmgDealt
                else
@@ -1663,12 +1664,12 @@ function FindTarget(weaponId, type)
             -- IsTargetObstructed(<weaponId>, <type>, <position of target>, <hitpoints>)
             -- dmgDealt is 100% - HP left of target after hitting (only relevant when splash damage is dealt)
    
-            LogLower("Checking target " .. targetType .. " " .. targetId)
+            --LogLower("Checking target " .. targetType .. " " .. targetId)
             local targetObstructed, dmgDealt = IsTargetObstructed(weaponId, type, targetPos, hitpoints,needLineOfSight,needLineToStructure, targetId,{direct = 1.6,splash = 1})
-            LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
+            --LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
             
             if not targetObstructed then
-               return targetPos
+               return targetPos,targetPos
                --[[if dmgDealt then
                   targetPriority = priorities[type][k][3] * dmgDealt
                else
@@ -1704,9 +1705,9 @@ function FindTarget(weaponId, type)
             -- IsTargetObstructed(<weaponId>, <type>, <position of target>, <hitpoints>)
             -- dmgDealt is 100% - HP left of target after hitting (only relevant when splash damage is dealt)
 
-            LogLower("Checking target " .. targetType .. " " .. targetId)
+            --LogLower("Checking target " .. targetType .. " " .. targetId)
             local targetObstructed, dmgDealt = IsTargetObstructed(weaponId, type, targetPos, hitpoints,needLineOfSight,needLineToStructure, targetId,{direct = 1.6,splash = 1})
-            LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
+            --LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
             
             if not targetObstructed then
                if dmgDealt then
@@ -1727,6 +1728,7 @@ function FindTarget(weaponId, type)
       if #bestTarget == 0 then
          data.FailedAttempts[weaponId] = (data.FailedAttempts[weaponId] or 0) + 1
       end
+      rolledForTarget = true
    else
       --Log("fire At Prio Target +Splash")
       for k=1,#priorities[type] do
@@ -1769,11 +1771,19 @@ function FindTarget(weaponId, type)
       if #bestTarget == 0 then
          data.FailedAttempts[weaponId] = (data.FailedAttempts[weaponId] or 0) + 1
       end
+      rolledForTarget = true
    end
    --Log("Firing at " .. (bestTarget or "nothing"))
    if #bestTarget > 0 then
+      if data.FailedAttempts[weaponId] then
+         Log(""..data.FailedAttempts[weaponId])
+         if data.FailedAttempts[weaponId] > 0.65 then
+            rolledForTarget = true
+         end
+      end
       data.FailedAttempts[weaponId] = 0
    else return nil end
+   if rolledForTarget then return bestTarget[GetRandomInteger(1, #bestTarget, "FindPriorityTarget " .. bestTarget[1].x)],bestTarget[GetRandomInteger(1, #bestTarget, "FindPriorityTarget " .. bestTarget[1].x)] end
    return bestTarget[GetRandomInteger(1, #bestTarget, "FindPriorityTarget " .. bestTarget[1].x)]
 
   --TargetRandom = RandomFloat%0.000001*1000000+0.01
@@ -2094,7 +2104,9 @@ function comparePositions(pos1, pos2)
   return (pos1.x == pos2.x and pos1.y == pos2.y)
 end
 
-function TryFireGun(id, useGroup,index)
+function TryFireGun(id, useGroup,index,rdmRollTarget)
+   local rdmRollTarget = rdmRollTarget or nil
+   --if rdmRollTarget then BetterLog(rdmRollTarget) end
 	if data.gameEnded then
 		return
 	end
@@ -2173,8 +2185,18 @@ function TryFireGun(id, useGroup,index)
 	if not useGroup then
 		group = SelectWeaponGroup(id)
 	end
-	
-	local currentTarget = FindTarget(id, type)
+   
+   local currentTarget
+	if rdmRollTarget then
+      currentTarget = rdmRollTarget
+   else
+	   currentTarget,toRdmRollTarget = FindTarget(id, type)
+   end
+   rdmRollTarget = toRdmRollTarget or rdmRollTarget or nil
+   BetterLog(rdmRollTarget)
+   --local currentTarget = rdmRollTarget or FindTarget(id, type)
+   --[[local currentTarget, toRdmRollTarget = rdmRollTarget or FindTarget(id, type)
+   rdmRollTarget = toRdmRollTarget or rdmRollTarget or nil]]
 	if currentTarget == nil then
 		--LogDetail("No target")
 		if not data.SpotterInUse[id] and not data.MissileLaunching[id] then
@@ -2200,7 +2222,7 @@ function TryFireGun(id, useGroup,index)
 		end
 		if doorsObstructing then
 			--LogDetail("  Doors obstructing group, opening. leader " .. type)
-			ScheduleCall(data.GroupDoorOpenDelay, TryFireGun, id, group,index)
+			ScheduleCall(data.GroupDoorOpenDelay, TryFireGun, id, group,index,rdmRollTarget)
 			return
 		end
 
@@ -2210,8 +2232,8 @@ function TryFireGun(id, useGroup,index)
 			if not RequiresSpotter(type, teamId) then
 				data.offenceBucket = data.offenceBucket + 2
 				--LogDetail("Attempting to fire group weapon " .. gid .. " of type " .. type)
-				--local result = FireWeapon(gid, currentTarget, data.FireErrorStdDevOverride[type] or FireErrorStdDev[type] or data.FireStdDevDefault, FIREFLAG_EXTRACLEARANCE)
-				local result = FireWeaponHandler(gid, type, currentTarget, data.FireErrorStdDevOverride[type] or FireErrorStdDev[type] or data.FireStdDevDefault, data.FireWeaponHandlerFireFlags)
+				local result = FireWeapon(gid, currentTarget, 0, FIREFLAG_EXTRACLEARANCE)
+				--local result = FireWeaponHandler(gid, type, currentTarget, data.FireErrorStdDevOverride[type] or FireErrorStdDev[type] or data.FireStdDevDefault, data.FireWeaponHandlerFireFlags)
 				if result == FIRE_SUCCESS then
 					--LogDetail("Fired weapon " .. gid .. " of type " .. type)
 					-- close door in a little delay
@@ -2223,7 +2245,7 @@ function TryFireGun(id, useGroup,index)
 				elseif result == FIRE_DOOR then
 					--LogDetail("  Door hit, retry single weapon " .. gid)
 					-- door will be opening, try again soon
-					ScheduleCall(data.GroupDoorOpenDelay, TryFireGun, gid, group, index)
+					ScheduleCall(data.GroupDoorOpenDelay, TryFireGun, gid, group, index,rdmRollTarget)
 				else
 					--LogError(FIRE[result] .. ": close doors after failure")
 					TryCloseWeaponDoorsWithDelay(gid, "TryFireGun 3 door ")
