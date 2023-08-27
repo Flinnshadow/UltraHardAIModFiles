@@ -150,6 +150,11 @@ data.ProjectileHitpoints["buzzsaw"] = 40*19
 data.ProjectileHitpoints["shotgun"] = 160
 data.ProjectileHitpoints["sniper2"] = 650
 data.ProjectileHitpoints["sniper"] = 100 -- gradually increases with failed attempts
+data.ProjectileHitpoints["mortar"] = 160
+data.ProjectileHitpoints["mortar2"] = 160
+
+data.AntiAirInclude["cannon"] = { ["howitzer"] = true, }
+data.AntiAirInclude["howitzer"] = { ["balls"] = false, } -- to make them shoot at nothing
 
 data.AntiAirLateralStdDev =
 {
@@ -272,16 +277,16 @@ data.HitsBackground =
 
 data.CloseDoorDelay = 
 {
-	["rocket"] = 0.2,
-	["rocketemp"] = 0.2,
+    ["rocket"] = 0.2,
+    ["rocketemp"] = 0.2,
    ["laser"] = 0.5,
 }
 
 WeaponFiresLobbedProjectile =
 {
-	["mortar2"] = true,
-	["mortar"] = true,
-	["howitzer"] = true,
+    ["mortar2"] = true,
+    ["mortar"] = true,
+    ["howitzer"] = true,
 }
 
 data.OffensiveFireProbability["sniper"] = 1
@@ -307,707 +312,710 @@ end
 
 function UpdateAI() -- Added to remove weapon bucket variable manip
 
-	if data.gameEnded or data.defeated then return end
-	local teamCommanderPoints = GetTeamCommanderPoints(teamId)
-	if not data.DisableCommander and teamCommanderPoints == 1 and not IsHumanOnSide(teamId) and data.gameTime >= 4*60 then
-		ActivateCommander(teamId)
-	end
-	--local teamResources = GetTeamResources(teamId)                                                                           //Not used.
-	--local offensivePhase = not data.BuildOnly and difficulty >= data.HardThreshold or TableLength(data.ActionQueue) > 0      //Not nessesary.
+    if data.gameEnded or data.defeated then return end
+    local teamCommanderPoints = GetTeamCommanderPoints(teamId)
+    if not data.DisableCommander and teamCommanderPoints == 1 and not IsHumanOnSide(teamId) and data.gameTime >= 4*60 then
+        ActivateCommander(teamId)
+    end
+    --local teamResources = GetTeamResources(teamId)                                                                           //Not used.
+    --local offensivePhase = not data.BuildOnly and difficulty >= data.HardThreshold or TableLength(data.ActionQueue) > 0      //Not nessesary.
 
-	-- AI toggles between pause (data.resumeTime is set) and construction (data.pauseTime is set)
-	-- within pause it will spend some proportion of time on offense (data.OffensivePhase by default)
-	-- if there's no construction left it will spend more time on offense
-	-- if there are deformed nodes offense is avoided and construction suspended
-	--[[if not offensivePhase and #deformedNodes == 0 and not data.BuildOnly then                                              //Not nessesary
-		local noConstruction = (data.fortIndex >= #Fort and data.activeBuilding)
-		local offensiveProportion = data.OffensivePhase
-		if noConstruction then
-			LogDetail("no construction: reducing idle phase")
-			offensiveProportion = data.OffensivePhaseHard
-		end
-		if data.resumeTime then
-			local timeLeft = data.resumeTime - data.gameTime
-			local proportionLeft = timeLeft/data.pausePeriod
-			offensivePhase = proportionLeft < offensiveProportion
-			if offensivePhase then
-				LogDetail("offensive phase")
-			else
-				LogDetail("waiting for offensive phase")
-			end
-		end
-	end]]
+    -- AI toggles between pause (data.resumeTime is set) and construction (data.pauseTime is set)
+    -- within pause it will spend some proportion of time on offense (data.OffensivePhase by default)
+    -- if there's no construction left it will spend more time on offense
+    -- if there are deformed nodes offense is avoided and construction suspended
+    --[[if not offensivePhase and #deformedNodes == 0 and not data.BuildOnly then                                              //Not nessesary
+        local noConstruction = (data.fortIndex >= #Fort and data.activeBuilding)
+        local offensiveProportion = data.OffensivePhase
+        if noConstruction then
+            LogDetail("no construction: reducing idle phase")
+            offensiveProportion = data.OffensivePhaseHard
+        end
+        if data.resumeTime then
+            local timeLeft = data.resumeTime - data.gameTime
+            local proportionLeft = timeLeft/data.pausePeriod
+            offensivePhase = proportionLeft < offensiveProportion
+            if offensivePhase then
+                LogDetail("offensive phase")
+            else
+                LogDetail("waiting for offensive phase")
+            end
+        end
+    end]]
 
-	-- find nodes that have moved significantly from their expected positions                                                  //MOVED FOR CLARITY, from above OffensivePhase Check
-	local deformedNodes = FindDeformedNodes()
-	-- delete deformed nodes progressively
-	ProcessDeformedNodes(deformedNodes)                                                                                      --//Causes softlocks, in particular, dynamic nodes
+    -- find nodes that have moved significantly from their expected positions                                                  //MOVED FOR CLARITY, from above OffensivePhase Check
+    --local deformedNodes = FindDeformedNodes()
+    local deformedNodes = {}
+    -- delete deformed nodes progressively
+    --ProcessDeformedNodes(deformedNodes)                                                                                      --//Causes softlocks, in particular, dynamic nodes
 
-	-- only shoot while construction is paused or the difficulty level is extreme
-	if --[[offensivePhase and]] not data.Disable and not data.DisableOffence then
-		data.offenceBucket = data.offenceBucket - 1
-		local weaponCount = GetWeaponCount(teamId)
-		local attemptCount = 0
-		if weaponCount > 0 then
-			local done = false
-			local firstIndex = data.currWeapon
-			repeat
-				if data.currWeapon < weaponCount then
+    -- only shoot while construction is paused or the difficulty level is extreme
+    if --[[offensivePhase and]] not data.Disable and not data.DisableOffence then
+        data.offenceBucket = data.offenceBucket - 1
+        local weaponCount = GetWeaponCount(teamId)
+        local attemptCount = 0
+        if weaponCount > 0 then
+            local done = false
+            local firstIndex = data.currWeapon
+            repeat
+                if data.currWeapon < weaponCount then
                --UpdateWeapon(data.currWeapon, not data.activeBuilding)                                                       --//Note, Removed all delay on weapon fireing, not ideal but prob not bad eithter, will cause more lag
-					if data.offencePoints >= 1 and UpdateWeapon(data.currWeapon--[[, not data.activeBuilding]]) then
-						data.offencePoints = data.offencePoints - 1
-						done = true
-					end
-					
-					data.currWeapon = data.currWeapon + 1
-					if data.currWeapon == weaponCount then
-						data.currWeapon = 0
-					end
-				else
-					data.currWeapon = 0
-				end
-				attemptCount = attemptCount + 1
-				if data.currWeapon == firstIndex or attemptCount >= weaponCount then
-					done = true -- prevent continuous cycle on unready weapons
-				end
-			until done
-		end
-		if data.offenceBucket < 0 then
-			data.offenceBucket = 0
-		elseif data.offenceBucket > 6 then
-			data.offenceBucket = 6
-		end
-		--LogEnum("Offence bucket = " .. data.offenceBucket)                                                                    //IMPORTANT, unless luac is smart, each LogEnum call is just wasted time, remove them if you can.
-	end
+                    if data.offencePoints >= 1 and UpdateWeapon(data.currWeapon--[[, not data.activeBuilding]]) then
+                        data.offencePoints = data.offencePoints - 1
+                        done = true
+                    end
+                    
+                    data.currWeapon = data.currWeapon + 1
+                    if data.currWeapon == weaponCount then
+                        data.currWeapon = 0
+                    end
+                else
+                    data.currWeapon = 0
+                end
+                attemptCount = attemptCount + 1
+                if data.currWeapon == firstIndex or attemptCount >= weaponCount then
+                    done = true -- prevent continuous cycle on unready weapons
+                end
+            until done
+        end
+        if data.offenceBucket < 0 then
+            data.offenceBucket = 0
+        elseif data.offenceBucket > 6 then
+            data.offenceBucket = 6
+        end
+        --LogEnum("Offence bucket = " .. data.offenceBucket)                                                                    //IMPORTANT, unless luac is smart, each LogEnum call is just wasted time, remove them if you can.
+    end
 
-	data.activeBuilding = false
+    data.activeBuilding = false
 
-	-- Attempt to rebuild parts of the fort that have been lost
-	if Fort and not data.Disable and not data.DisableRebuild and #deformedNodes == 0 then
-		for k,action in ipairs(Fort) do
-			if data.Rebuild[k] then
-				--LogDetail("Rebuild action[" .. k .. "] = " .. ACTION[action.Type])
-				local result, skipAction = ExecuteFortAction(action, k)
-				if result then
-					data.Rebuild[k] = nil
-					ResetFrustration(k)
-					if not skipAction then
-						--LogDetail("Rebuild succeeded")
-						ScheduleCall(data.UpdateAfterRebuildDelay, UpdateAI)
-						return
-					else
-						--LogDetail("Rebuild succeeded and skipped")
-					end
-				else
-					LogError("Rebuild action " .. k .. " failed")
-					if not skipAction then
-						--LogOriginalToActual()
-						--ScheduleCall(3 - 2*difficulty, UpdateAI)
-						--return
-						--LogDetail("Rebuild no skip")
-						ScheduleCall(data.UpdateAfterRebuildDelay, UpdateAI)
-						return
-					else
-						--LogDetail("Rebuild skipped")
-					end
-				end
-			end
-		end
-	end
+    -- Attempt to rebuild parts of the fort that have been lost
+    if Fort and not data.Disable and not data.DisableRebuild and #deformedNodes == 0 then
+        for k,action in ipairs(Fort) do
+            if data.Rebuild[k] then
+                --LogDetail("Rebuild action[" .. k .. "] = " .. ACTION[action.Type])
+                local result, skipAction = ExecuteFortAction(action, k)
+                if result then
+                    data.Rebuild[k] = nil
+                    ResetFrustration(k)
+                    if not skipAction then
+                        --LogDetail("Rebuild succeeded")
+                        ScheduleCall(data.UpdateAfterRebuildDelay, UpdateAI)
+                        return
+                    else
+                        --LogDetail("Rebuild succeeded and skipped")
+                    end
+                else
+                    LogError("Rebuild action " .. k .. " failed")
+                    if not skipAction then
+                        --LogOriginalToActual()
+                        --ScheduleCall(3 - 2*difficulty, UpdateAI)
+                        --return
+                        --LogDetail("Rebuild no skip")
+                        ScheduleCall(data.UpdateAfterRebuildDelay, UpdateAI)
+                        return
+                    else
+                        --LogDetail("Rebuild skipped")
+                    end
+                end
+            end
+        end
+    end
 
-	--LogDetail("data.fortIndex = " .. data.fortIndex .. "/" .. #Fort)
+    --LogDetail("data.fortIndex = " .. data.fortIndex .. "/" .. #Fort)
 
-	-- if execution gets to here there may be some frustrated rebuild actions
-	-- but normal building can proceed while waiting for those to correct (or not)
-	data.activeBuilding = true
+    -- if execution gets to here there may be some frustrated rebuild actions
+    -- but normal building can proceed while waiting for those to correct (or not)
+    data.activeBuilding = true
 
-	--LogEnum("gameTime " .. data.gameTime .. " pauseTime " .. (data.pauseTime or "nil") .. " resumeTime " .. (data.resumeTime or "nil"))
+    --LogEnum("gameTime " .. data.gameTime .. " pauseTime " .. (data.pauseTime or "nil") .. " resumeTime " .. (data.resumeTime or "nil"))
 
-	-- pause construction periodically to slow the AI down
-	local paused = data.Disable
-	if not data.pauseTime and not data.HumanAssist and not data.BuildOnly then
-		if data.resumeTime == nil or data.gameTime > data.resumeTime then
-			-- ready to resume, schedule a new pause time
-			data.pausePeriod = nil
-			data.resumeTime = nil
-			local delay = GetNormalFloat(data.ConstructionPeriodStdDev, data.ConstructionPeriodMean, "UpdateAI construction delay")
-			if delay < data.ConstructionPeriodMin then delay = data.ConstructionPeriodMin end
-			data.pauseTime = data.gameTime + delay
-			LogDetail("Resuming construction: pausing in " .. delay .. " seconds")
-		else
-			-- wait until we have reached the resume time
-			LogEnum("paused: " .. data.resumeTime - data.gameTime .. " seconds to go")
-			paused = true
-		end
-	end
+    -- pause construction periodically to slow the AI down
+    local paused = data.Disable
+    if not data.pauseTime and not data.HumanAssist and not data.BuildOnly then
+        if data.resumeTime == nil or data.gameTime > data.resumeTime then
+            -- ready to resume, schedule a new pause time
+            data.pausePeriod = nil
+            data.resumeTime = nil
+            local delay = GetNormalFloat(data.ConstructionPeriodStdDev, data.ConstructionPeriodMean, "UpdateAI construction delay")
+            if delay < data.ConstructionPeriodMin then delay = data.ConstructionPeriodMin end
+            data.pauseTime = data.gameTime + delay
+            LogDetail("Resuming construction: pausing in " .. delay .. " seconds")
+        else
+            -- wait until we have reached the resume time
+            LogEnum("paused: " .. data.resumeTime - data.gameTime .. " seconds to go")
+            paused = true
+        end
+    end
 
-	if not paused and not data.HumanAssist then
-		-- build the given fort in sequence
-		while Fort and data.fortIndex <= #Fort do
-			local action = Fort[data.fortIndex]
-			LogEnum("action[" .. data.fortIndex .. "] = " .. ACTION[action.Type])
-			local result, skip = ExecuteFortAction(action, data.fortIndex)
-			if result then
-				ResetFrustration(data.fortIndex)
-				data.fortIndex = data.fortIndex + 1
-				if not skip then break end
-			elseif IsFrustrated(data.fortIndex) then
-				LogDetail("Proceeding past frustrated action, rebuild later")
-				data.Rebuild[data.fortIndex] = true
-				data.fortIndex = data.fortIndex + 1
-				if not skip then break end
-			else
-				break
-			end
-		end
+    if not paused and not data.HumanAssist then
+        -- build the given fort in sequence
+        while Fort and data.fortIndex <= #Fort do
+            local action = Fort[data.fortIndex]
+            LogEnum("action[" .. data.fortIndex .. "] = " .. ACTION[action.Type])
+            local result, skip = ExecuteFortAction(action, data.fortIndex)
+            if result then
+                ResetFrustration(data.fortIndex)
+                data.fortIndex = data.fortIndex + 1
+                if not skip then break end
+            elseif IsFrustrated(data.fortIndex) then
+                LogDetail("Proceeding past frustrated action, rebuild later")
+                data.Rebuild[data.fortIndex] = true
+                data.fortIndex = data.fortIndex + 1
+                if not skip then break end
+            else
+                break
+            end
+        end
 
-		-- see if it's time to pause construction, and decide how long for
-		-- some of the pause time the AI will use for offense
-		if data.pauseTime then
-			local newNodeCount = TableLength(data.NewNodes)
-		
-			if data.gameTime > data.pauseTime and newNodeCount == 0 then
-				data.pauseTime = nil
-				data.pausePeriod = GetNormalFloat(data.NonConstructionPeriodStdDev, data.NonConstructionPeriodMean, "UpdateAI PausePeriod")
-				if data.pausePeriod < data.NonConstructionPeriodMin then data.pausePeriod = data.NonConstructionPeriodMin end
-				--if data.offenceBucket == 0 then
-					-- shorten the construction pause if there aren't many weapons or targets
-			   data.pausePeriod = 0.1*data.pausePeriod*difficulty + data.pausePeriod*(1 - difficulty)                          --//Note, this will always be called, however pausePeriod should be disabled TODO: check if can remove the pausePeriod variable entirely
-				--end
-				if data.fortIndex >= #Fort and data.activeBuilding then
-					LogDetail("No construction, increasing pause period")
-					data.pausePeriod = data.NoConstructionPauseFactor*data.pausePeriod
-				end
-				data.resumeTime = data.gameTime + data.pausePeriod
-				LogDetail("Pausing construction. Resuming in " .. data.pausePeriod .. " seconds.")
-			else
-				LogEnum("executing: pause in " .. data.pauseTime - data.gameTime .. " seconds")
-			end
-		end
-	end
-	ScheduleCall(data.UpdatePeriod, UpdateAI)
+        -- see if it's time to pause construction, and decide how long for
+        -- some of the pause time the AI will use for offense
+        if data.pauseTime then
+            local newNodeCount = TableLength(data.NewNodes)
+        
+            if data.gameTime > data.pauseTime and newNodeCount == 0 then
+                data.pauseTime = nil
+                data.pausePeriod = GetNormalFloat(data.NonConstructionPeriodStdDev, data.NonConstructionPeriodMean, "UpdateAI PausePeriod")
+                if data.pausePeriod < data.NonConstructionPeriodMin then data.pausePeriod = data.NonConstructionPeriodMin end
+                --if data.offenceBucket == 0 then
+                    -- shorten the construction pause if there aren't many weapons or targets
+               data.pausePeriod = 0.1*data.pausePeriod*difficulty + data.pausePeriod*(1 - difficulty)                          --//Note, this will always be called, however pausePeriod should be disabled TODO: check if can remove the pausePeriod variable entirely
+                --end
+                if data.fortIndex >= #Fort and data.activeBuilding then
+                    LogDetail("No construction, increasing pause period")
+                    data.pausePeriod = data.NoConstructionPauseFactor*data.pausePeriod
+                end
+                data.resumeTime = data.gameTime + data.pausePeriod
+                LogDetail("Pausing construction. Resuming in " .. data.pausePeriod .. " seconds.")
+            else
+                LogEnum("executing: pause in " .. data.pauseTime - data.gameTime .. " seconds")
+            end
+        end
+    end
+    ScheduleCall(data.UpdatePeriod, UpdateAI)
 end
 
 function UpdateWeapon(index)
-	local id = GetWeaponId(teamId, index)
-	if id > 0 then
-		--[[if IsDummy(id) then
-			--LogError("Weapon dummy: " .. id)
-			return false
-		end]]
+    local id = GetWeaponId(teamId, index)
+    if id > 0 then
+        --[[if IsDummy(id) then
+            --LogError("Weapon dummy: " .. id)
+            return false
+        end]]
 
-		if TableLength(data.ActionQueue) > 0 and data.ActionQueue[id] == nil then
+        if TableLength(data.ActionQueue) > 0 and data.ActionQueue[id] == nil then
          --Log("return F")
-			return false
-		end
-		
-		if data.ResourceStarved then
-			-- some weapons take too many resources from reconstruction efforts
-			-- decide based on probability table
-			local type = GetDeviceType(id)
-			local probability = (data.FireDuringRebuildProbability[type] or 0)
-			if data.ResourceStarved then
-				-- reduce fire rate to save
-				probability = data.StarvedProbabilityFactor*probability
-			end
-			if GetRandomFloat(0,1, "UpdateWeapon " .. id) > probability then
+            return false
+        end
+        
+        if data.ResourceStarved then
+            -- some weapons take too many resources from reconstruction efforts
+            -- decide based on probability table
+            local type = GetDeviceType(id)
+            local probability = (data.FireDuringRebuildProbability[type] or 0)
+            if data.ResourceStarved then
+                -- reduce fire rate to save
+                probability = data.StarvedProbabilityFactor*probability
+            end
+            if GetRandomFloat(0,1, "UpdateWeapon " .. id) > probability then
             --Log("RS")
-				--LogDetail("Avoiding fire of " .. type .. " during " .. context .. ", probability " .. probability)
-				return false
-			end
-		end
-      TryFireGun(id,nil,index)
+                --LogDetail("Avoiding fire of " .. type .. " during " .. context .. ", probability " .. probability)
+                return false
+            end
+        end
+      TryFireGun(id,nil,index, nil)
       return true
-	else
-		--LogError("Weapon not found " .. id)
-		return false
-	end
+    else
+        --LogError("Weapon not found " .. id)
+        return false
+    end
 end
 
 function CheckDeviceForRebuild(deviceId, saveName, nodeA, nodeB)
-	if data.gameEnded or data.HumanAssist then return end
+    if data.gameEnded or data.HumanAssist then return end
 
-	--if data.DisableReplace then return end
+    --if data.DisableReplace then return end
 
-	--LogFunction("OnDeviceDestroyed " .. saveName .. ", device id " .. deviceId .. " N" .. nodeA .. "-" .. nodeB)
+    --LogFunction("OnDeviceDestroyed " .. saveName .. ", device id " .. deviceId .. " N" .. nodeA .. "-" .. nodeB)
 
-	if data.Devices[deviceId] then
-		--local rebuildDelay = GetRandomFloat(data.ReplaceDeviceDelayMin, data.ReplaceDeviceDelayMax, "OnDeviceDestroyed 1 " .. deviceId)
+    if data.Devices[deviceId] then
+        --local rebuildDelay = GetRandomFloat(data.ReplaceDeviceDelayMin, data.ReplaceDeviceDelayMax, "OnDeviceDestroyed 1 " .. deviceId)
 
-		-- to prevent upgraded devices getting rebuilt immediately
-		data.Rebuild[data.Devices[deviceId]] = nil
+        -- to prevent upgraded devices getting rebuilt immediately
+        data.Rebuild[data.Devices[deviceId]] = nil
 
-		--LogDetail("Scheduling rebuild of " .. saveName .. " with id " .. deviceId .. " associated with action " .. data.Devices[deviceId] .. " with delay of " .. rebuildDelay)
-		ScheduleCall(0, QueueDeviceRebuild, deviceId)
-		if IsWeapon(deviceId) then
-			TryCloseWeaponDoorsWithDelay(deviceId, "OnDeviceDestroyed 2 ")
-		end
-	else
-		LogDetail("Device not recognised")
-	end
+        --LogDetail("Scheduling rebuild of " .. saveName .. " with id " .. deviceId .. " associated with action " .. data.Devices[deviceId] .. " with delay of " .. rebuildDelay)
+        ScheduleCall(0, QueueDeviceRebuild, deviceId)
+        if IsWeapon(deviceId) then
+            TryCloseWeaponDoorsWithDelay(deviceId, "OnDeviceDestroyed 2 ")
+        end
+    else
+        LogDetail("Device not recognised")
+    end
 
-	for k,v in ipairs(data.TrackedProjectiles) do
-		v.Claims[deviceId] = nil
-	end
+    for k,v in ipairs(data.TrackedProjectiles) do
+        v.Claims[deviceId] = nil
+    end
 end
 
 function TryCloseWeaponDoorsWithDelay(id, desc, additionalDelay)
-	ScheduleCall(additionalDelay or 0, TryCloseWeaponDoors, id)
-	--LogDetail("TryCloseWeaponDoorsWithDelay " .. desc .. id .. ", delay " .. delay)
+   Log("close " .. desc)
+    ScheduleCall(additionalDelay or 0, TryCloseWeaponDoors, id)
+    --LogDetail("TryCloseWeaponDoorsWithDelay " .. desc .. id .. ", delay " .. delay)
 end
 
 function TryCloseWeaponGroupDoors(group)
-	if group then
-		for i=1,#group do
-			TryCloseWeaponDoors(group[i])
-		end
-	end
+    if group then
+        for i=1,#group do
+            TryCloseWeaponDoors(group[i])
+        end
+    end
 end
 
 function TryCloseWeaponDoors(id)
-	--LogDetail("TryCloseWeaponDoors of " .. id)
-	local spotterInUse = data.SpotterInUse[id]
-	local missileLaunching = data.MissileLaunching[id]
-	--local available = IsDeviceAvailable(id)
-	if not spotterInUse and not missileLaunching --[[and available ]]then
-		local fireTime = GetWeaponFiringTimeRemaining(id)
-		if fireTime < 0.05 then
-			CloseWeaponDoors(id)
-		else
-			ScheduleCall(fireTime, TryCloseWeaponDoors, id)
-		end
+   Log("CLOSING DOORS " .. id)
+    --LogDetail("TryCloseWeaponDoors of " .. id)
+    local spotterInUse = data.SpotterInUse[id]
+    local missileLaunching = data.MissileLaunching[id]
+    --local available = IsDeviceAvailable(id)
+    if not spotterInUse and not missileLaunching --[[and available ]]then
+        local fireTime = GetWeaponFiringTimeRemaining(id)
+        if fireTime < 0.05 then
+            CloseWeaponDoors(id)
+        else
+            ScheduleCall(fireTime, TryCloseWeaponDoors, id)
+        end
 --	else
 --		Log("  failed: " .. tostring(spotterInUse) .. ", " .. tostring(missileLaunching) .. ", " .. tostring(available))
-	end
+    end
 end
 function IsSlowFiringAntiAir(id)
    return true -- This always returns true when the AntiAir is this low
-	--return GetWeaponReloadPeriodById(id) > 2*data.AntiAirPeriod
+    --return GetWeaponReloadPeriodById(id) > 2*data.AntiAirPeriod
 end
 
 function TryShootDownProjectiles()
-	if data.gameWinner and data.gameWinner ~= teamId then return end
+    if data.gameWinner and data.gameWinner ~= teamId then return end
 
-	for id,lockdown in pairs(data.AntiAirLockDown) do
-		if data.gameFrame - lockdown[1] > 2.5*30 then
-			data.AntiAirLockDown[id] = nil
-		end
-	end
+    for id,lockdown in pairs(data.AntiAirLockDown) do
+        if data.gameFrame - lockdown[1] > 2.5*30 then
+            data.AntiAirLockDown[id] = nil
+        end
+    end
 
-	for k,v in ipairs(data.TrackedProjectiles) do
-		local nodeTeamId = AA_NodeTeam(v.ProjectileNodeId)
-		if nodeTeamId == TEAM_ANY or nodeTeamId%MAX_SIDES ~= enemyTeamId then
-			for a,b in ipairs(v.AntiAirWeapons) do
-				--if IsDeviceAvailable(b) then
-					TryCloseWeaponDoorsWithDelay(b, "TryShootDownProjectiles CloseDoors proj " .. v.ProjectileNodeId .. ", ")
-				--end
-			end
-			table.remove(data.TrackedProjectiles, k)
-		end
-	end
+    for k,v in ipairs(data.TrackedProjectiles) do
+        local nodeTeamId = AA_NodeTeam(v.ProjectileNodeId)
+        if nodeTeamId == TEAM_ANY or nodeTeamId%MAX_SIDES ~= enemyTeamId then
+            for a,b in ipairs(v.AntiAirWeapons) do
+                --if IsDeviceAvailable(b) then
+                    TryCloseWeaponDoorsWithDelay(b, "TryShootDownProjectiles CloseDoors proj " .. v.ProjectileNodeId .. ", ")
+                --end
+            end
+            table.remove(data.TrackedProjectiles, k)
+        end
+    end
 
-	if not data.Disable and not data.DisableAntiAir then
-		local weaponCount = GetAntiAirWeaponCount()
-		if data.NextAntiAirIndex >= weaponCount then
-			data.NextAntiAirIndex = 0
-		end
+    if not data.Disable and not data.DisableAntiAir then
+        local weaponCount = GetAntiAirWeaponCount()
+        if data.NextAntiAirIndex >= weaponCount then
+            data.NextAntiAirIndex = 0
+        end
 
-		if #data.TrackedProjectiles > 0 then
-			local fireTestFlags = FIREFLAG_TEST | FIREFLAG_IGNOREFASTDOORS | FIREFLAG_TERRAINBLOCKS | FIREFLAG_EXTRACLEARANCE
-			local rayFlags = RAY_EXCLUDE_CONSTRUCTION | RAY_NEUTRAL_BLOCKS | RAY_PORTAL_BLOCKS | RAY_EXCLUDE_FASTDOORS | RAY_EXTRA_CLEARANCE
-			for index = data.NextAntiAirIndex, weaponCount - 1 do
-				local id = GetAntiAirWeaponId(index)
-				local type = GetDeviceType(id)
-				local weaponPos = GetWeaponBarrelPosition(id)
-				local speed = AntiAirFireSpeed[type] or GetWeaponTypeProjectileSpeed(type)
-				local antiAirFireProb = 1--data.AntiAirFireProbability[type]
-				--[[local weaponOverride = data.AntiAirWeaponOverride[id]
-				if weaponOverride then
-					antiAirFireProb = weaponOverride
-				end]]
-				local fieldBlockFlags = 0
-				if GetWeaponFieldsBlockFiring(id) then
-					fieldBlockFlags = FIELD_BLOCK_FIRING
-				end
+        if #data.TrackedProjectiles > 0 then
+            local fireTestFlags = FIREFLAG_TEST | FIREFLAG_IGNOREFASTDOORS | FIREFLAG_TERRAINBLOCKS | FIREFLAG_EXTRACLEARANCE
+            local rayFlags = RAY_EXCLUDE_CONSTRUCTION | RAY_NEUTRAL_BLOCKS | RAY_PORTAL_BLOCKS | RAY_EXCLUDE_FASTDOORS | RAY_EXTRA_CLEARANCE
+            for index = data.NextAntiAirIndex, weaponCount - 1 do
+                local id = GetAntiAirWeaponId(index)
+                local type = GetDeviceType(id)
+                local weaponPos = GetWeaponBarrelPosition(id)
+                local speed = AntiAirFireSpeed[type] or GetWeaponTypeProjectileSpeed(type)
+                local antiAirFireProb = 1--data.AntiAirFireProbability[type]
+                --[[local weaponOverride = data.AntiAirWeaponOverride[id]
+                if weaponOverride then
+                    antiAirFireProb = weaponOverride
+                end]]
+                local fieldBlockFlags = 0
+                if GetWeaponFieldsBlockFiring(id) then
+                    fieldBlockFlags = FIELD_BLOCK_FIRING
+                end
 
-				local range = nil
-				if AntiAirFireLeadTimeMax[type] then
-					range = AntiAirFireLeadTimeMin[type]*speed
-				end
+                local range = nil
+                if AntiAirFireLeadTimeMax[type] then
+                    range = AntiAirFireLeadTimeMin[type]*speed
+                end
 
-				if antiAirFireProb and not data.AntiAirLockDown[id] and IsDeviceFullyBuilt(id) --[[and IsDeviceAvailable(id) and not IsDummy(id)]]
-					and (GetRandomFloat(0, 1, "TryShootDownProjectiles FireProb " .. id) < antiAirFireProb) then
-					--LogEnum("AntiAir " .. id .. " type " .. type)
+                if antiAirFireProb and not data.AntiAirLockDown[id] and IsDeviceFullyBuilt(id) --[[and IsDeviceAvailable(id) and not IsDummy(id)]]
+                    and (GetRandomFloat(0, 1, "TryShootDownProjectiles FireProb " .. id) < antiAirFireProb) then
+                    --LogEnum("AntiAir " .. id .. " type " .. type)
 
-					local dangerOfImpact = false
-					local closestTimeToImpact = 1000000
-					local bestTarget = nil
-					local best_t = nil
-					local best_pos = nil
-					local best_vel = nil
-					for k,v in ipairs(data.TrackedProjectiles) do
-						--Log("Evaluating projectile " .. v.ProjectileNodeId)
+                    local dangerOfImpact = false
+                    local closestTimeToImpact = 1000000
+                    local bestTarget = nil
+                    local best_t = nil
+                    local best_pos = nil
+                    local best_vel = nil
+                    for k,v in ipairs(data.TrackedProjectiles) do
+                        --Log("Evaluating projectile " .. v.ProjectileNodeId)
 
-						if v.IsVirtual and (data.AntiAirFiresAtVirtualWithin[type] == nil or v.TimeLeft > data.AntiAirFiresAtVirtualWithin[type]) then
-							continue
-						end
+                        if v.IsVirtual and (data.AntiAirFiresAtVirtualWithin[type] == nil or v.TimeLeft > data.AntiAirFiresAtVirtualWithin[type]) then
+                            continue
+                        end
 
-						local projectileId = v.ProjectileNodeId
-						local projectileType = AA_GetNodeProjectileType(v.ProjectileNodeId)
-						local projectileSaveName = AA_GetNodeProjectileSaveName(v.ProjectileNodeId)
-						local antiAirInclude = data.AntiAirInclude[type]
-						local antiAirExclude = data.AntiAirExclude[type]
+                        local projectileId = v.ProjectileNodeId
+                        local projectileType = AA_GetNodeProjectileType(v.ProjectileNodeId)
+                        local projectileSaveName = AA_GetNodeProjectileSaveName(v.ProjectileNodeId)
+                        local antiAirInclude = data.AntiAirInclude[type]
+                        local antiAirExclude = data.AntiAirExclude[type]
 
-						if projectileType >= 0
-							and (projectileType ~= PROJECTILE_TYPE_MISSILE or AA_IsMissileAttacking(projectileId)) and TableLength(v.Claims) == 0
-		 					and (antiAirInclude == nil or antiAirInclude[projectileSaveName] == true)
-							and (antiAirExclude == nil or antiAirExclude[projectileSaveName] ~= true) then
+                        if projectileType >= 0
+                            and (projectileType ~= PROJECTILE_TYPE_MISSILE or AA_IsMissileAttacking(projectileId)) and TableLength(v.Claims) == 0
+                             and (antiAirInclude == nil or antiAirInclude[projectileSaveName] == true)
+                            and (antiAirExclude == nil or antiAirExclude[projectileSaveName] ~= true) then
 
-							local pos = AA_NodePosition(projectileId)
-							local currVel = AA_NodeVelocity(projectileId)
-							local delta = weaponPos - pos
+                            local pos = AA_NodePosition(projectileId)
+                            local currVel = AA_NodeVelocity(projectileId)
+                            local delta = weaponPos - pos
 
-							-- calculate the time it will take to get our projectile to the target position
-							local fireDelay = GetWeaponTypeFireDelay(type, teamId)
-							local fireRoundsEachBurst = GetWeaponTypeRoundsEachBurst(type, teamId)
-							local firePeriod = GetWeaponTypeRoundsPeriod(type, teamId)
-							local leadTime = fireDelay + 0.5*(fireRoundsEachBurst - 1)*firePeriod
+                            -- calculate the time it will take to get our projectile to the target position
+                            local fireDelay = GetWeaponTypeFireDelay(type, teamId)
+                            local fireRoundsEachBurst = GetWeaponTypeRoundsEachBurst(type, teamId)
+                            local firePeriod = GetWeaponTypeRoundsPeriod(type, teamId)
+                            local leadTime = fireDelay + 0.5*(fireRoundsEachBurst - 1)*firePeriod
 
-							local d = Vec3Length(delta)
-							local targetSpeed = Vec3Length(currVel)
-							local timeToImpact = d/(targetSpeed + speed) + leadTime
-							local timeToSelf = d/targetSpeed
+                            local d = Vec3Length(delta)
+                            local targetSpeed = Vec3Length(currVel)
+                            local timeToImpact = d/(targetSpeed + speed) + leadTime
+                            local timeToSelf = d/targetSpeed
 
-							pos, vel = PredictProjectilePos(projectileId, timeToImpact)
-							local direction = Vec3(vel.x, vel.y)
-							Vec3Unit(direction)
+                            pos, vel = PredictProjectilePos(projectileId, timeToImpact)
+                            local direction = Vec3(vel.x, vel.y)
+                            Vec3Unit(direction)
 
-							if projectileType == PROJECTILE_TYPE_MISSILE then 
-								currVel.x = vel.x
-								currVel.y = vel.y
-							end
+                            if projectileType == PROJECTILE_TYPE_MISSILE then 
+                                currVel.x = vel.x
+                                currVel.y = vel.y
+                            end
 
-							local deltaUnit = Vec3(delta.x, delta.y)
-							Vec3Unit(deltaUnit)
+                            local deltaUnit = Vec3(delta.x, delta.y)
+                            Vec3Unit(deltaUnit)
 
-							local minTimeToImpact = AntiAirMinTimeToImpact[type] or data.AntiAirMinTimeToImpact
+                            local minTimeToImpact = AntiAirMinTimeToImpact[type] or data.AntiAirMinTimeToImpact
 
-							-- avoid ray cast if there's no chance it will pass further testing
-							-- ignore projectile if it's too close to shoot at
-							if (timeToImpact < closestTimeToImpact or timeToSelf < minTimeToImpact) then
-								-- don't fire at projectiles that are behind the weapon
-								local weaponForward = GetDeviceForward(id)
-								local dot = Vec3Dot(weaponForward, deltaUnit)
-								if dot < 0 then
-									local rayHit = CastRayFromDevice(id, pos, 1, rayFlags, fieldBlockFlags)
-									local hitDoor = GetRayHitDoor()
-									local lineOfSight = rayHit == RAY_HIT_NOTHING or hitDoor
-									local incomingAngle = ToDeg(math.acos(Vec3Dot(deltaUnit, direction)))
+                            -- avoid ray cast if there's no chance it will pass further testing
+                            -- ignore projectile if it's too close to shoot at
+                            if (timeToImpact < closestTimeToImpact or timeToSelf < minTimeToImpact) then
+                                -- don't fire at projectiles that are behind the weapon
+                                local weaponForward = GetDeviceForward(id)
+                                local dot = Vec3Dot(weaponForward, deltaUnit)
+                                if dot < 0 then
+                                    local rayHit = CastRayFromDevice(id, pos, 1, rayFlags, fieldBlockFlags)
+                                    local hitDoor = GetRayHitDoor()
+                                    local lineOfSight = rayHit == RAY_HIT_NOTHING or hitDoor
+                                    local incomingAngle = ToDeg(math.acos(Vec3Dot(deltaUnit, direction)))
 
-									local trajectoryThreat = lineOfSight and incomingAngle < 15
-									if lineOfSight then -- and projectileType == PROJECTILE_TYPE_MORTAR then
-										local g = AA_GetProjectileGravity(projectileId)
-										if g == 0 or projectileType == PROJECTILE_TYPE_MISSILE then g = 0.00001 end
-										local a = 0.5*g/(currVel.x*currVel.x)
-										local dydx = currVel.y/currVel.x;
-										local x = -delta.x
-										local y = -delta.y
-										local b = dydx - 2*a*x
-										local c = y - (a*x*x + b*x)
-										local discriminant = b*b - 4*a*c
-										if discriminant > 0 then
-											local discriminantSqRt = math.sqrt(discriminant)
-											local interceptA = (-b + discriminantSqRt)/(2*a)
-											local interceptB = (-b - discriminantSqRt)/(2*a)
-											local threatA = math.abs(interceptA) < 200
-											local threatB = math.abs(interceptB) < 200
-									
-											if not threatA and not threatB then
-												trajectoryThreat = false
-											end
-											if ShowAntiAirTrajectories and threatA then
-												SpawnCircle(weaponPos + Vec3(interceptA, 0), 10, Red(128), data.AntiAirPeriod)
-											end
-											if ShowAntiAirTrajectories and threatB then
-												SpawnCircle(weaponPos + Vec3(interceptB, 0), 10, Red(128), data.AntiAirPeriod)
-											end
-										end
+                                    local trajectoryThreat = lineOfSight and incomingAngle < 15
+                                    if lineOfSight then -- and projectileType == PROJECTILE_TYPE_MORTAR then
+                                        local g = AA_GetProjectileGravity(projectileId)
+                                        if g == 0 or projectileType == PROJECTILE_TYPE_MISSILE then g = 0.00001 end
+                                        local a = 0.5*g/(currVel.x*currVel.x)
+                                        local dydx = currVel.y/currVel.x;
+                                        local x = -delta.x
+                                        local y = -delta.y
+                                        local b = dydx - 2*a*x
+                                        local c = y - (a*x*x + b*x)
+                                        local discriminant = b*b - 4*a*c
+                                        if discriminant > 0 then
+                                            local discriminantSqRt = math.sqrt(discriminant)
+                                            local interceptA = (-b + discriminantSqRt)/(2*a)
+                                            local interceptB = (-b - discriminantSqRt)/(2*a)
+                                            local threatA = math.abs(interceptA) < 200
+                                            local threatB = math.abs(interceptB) < 200
+                                    
+                                            if not threatA and not threatB then
+                                                trajectoryThreat = false
+                                            end
+                                            if ShowAntiAirTrajectories and threatA then
+                                                SpawnCircle(weaponPos + Vec3(interceptA, 0), 10, Red(128), data.AntiAirPeriod)
+                                            end
+                                            if ShowAntiAirTrajectories and threatB then
+                                                SpawnCircle(weaponPos + Vec3(interceptB, 0), 10, Red(128), data.AntiAirPeriod)
+                                            end
+                                        end
 
-										if range then
-											-- work out roughly where the projectile enters the range of the weapon
-											local entryPoint = nil
-											local start = -delta.x
-											local targetTime = 0
-											local doorOffset = 0
-											if hitDoor then
-												doorOffset = -AntiAirDoorDelay
-											end
+                                        if range then
+                                            -- work out roughly where the projectile enters the range of the weapon
+                                            local entryPoint = nil
+                                            local start = -delta.x
+                                            local targetTime = 0
+                                            local doorOffset = 0
+                                            if hitDoor then
+                                                doorOffset = -AntiAirDoorDelay
+                                            end
 
-											local step = 200
-											local timeStep = step/math.abs(currVel.x)
-											if delta.x < 0 then
-												step = -step
-											end
-											local p1 = a*start*start + b*start + c
-											for i = start + step, weaponPos.x, step do
-												targetTime = targetTime + timeStep
+                                            local step = 200
+                                            local timeStep = step/math.abs(currVel.x)
+                                            if delta.x < 0 then
+                                                step = -step
+                                            end
+                                            local p1 = a*start*start + b*start + c
+                                            for i = start + step, weaponPos.x, step do
+                                                targetTime = targetTime + timeStep
 
-												local p2 = a*i*i + b*i + c
-												if ShowAntiAirTrajectories then
-													SpawnLine(weaponPos + Vec3(i - step, p1), weaponPos + Vec3(i, p2), Green(64), data.AntiAirPeriod)
-												end
-												p1 = p2
+                                                local p2 = a*i*i + b*i + c
+                                                if ShowAntiAirTrajectories then
+                                                    SpawnLine(weaponPos + Vec3(i - step, p1), weaponPos + Vec3(i, p2), Green(64), data.AntiAirPeriod)
+                                                end
+                                                p1 = p2
 
-												local targetPos = weaponPos + Vec3(i, p2)
-												local dist = Vec3Dist(weaponPos, targetPos)
-												if range and dist < range then
-													if ShowAntiAirTrajectories then
-														SpawnCircle(targetPos, 20, White(), data.AntiAirPeriod)
-													end
-													entryPoint = targetPos
-													--Log("entry at " .. targetTime)
-													break
-												end
-											end
+                                                local targetPos = weaponPos + Vec3(i, p2)
+                                                local dist = Vec3Dist(weaponPos, targetPos)
+                                                if range and dist < range then
+                                                    if ShowAntiAirTrajectories then
+                                                        SpawnCircle(targetPos, 20, White(), data.AntiAirPeriod)
+                                                    end
+                                                    entryPoint = targetPos
+                                                    --Log("entry at " .. targetTime)
+                                                    break
+                                                end
+                                            end
 
-											if not entryPoint
-												or (AntiAirFireLeadTimeMin[type] == nil or (targetTime + doorOffset) < AntiAirFireLeadTimeMin[type])
-												or (AntiAirFireLeadTimeMax[type] == nil or (targetTime + doorOffset) >= AntiAirFireLeadTimeMax[type]) then
-													continue
-											elseif targetTime <= range/speed then
-												timeToImpact = targetTime
-												pos = entryPoint
-											end
-										end
-									end
+                                            if not entryPoint
+                                                or (AntiAirFireLeadTimeMin[type] == nil or (targetTime + doorOffset) < AntiAirFireLeadTimeMin[type])
+                                                or (AntiAirFireLeadTimeMax[type] == nil or (targetTime + doorOffset) >= AntiAirFireLeadTimeMax[type]) then
+                                                    continue
+                                            elseif targetTime <= range/speed then
+                                                timeToImpact = targetTime
+                                                pos = entryPoint
+                                            end
+                                        end
+                                    end
 
-									local danger = timeToSelf < minTimeToImpact and trajectoryThreat
+                                    local danger = timeToSelf < minTimeToImpact and trajectoryThreat
 
-									if lineOfSight -- must be able to shoot it
-										and (danger or danger == dangerOfImpact) -- ignore unthreatening projectiles if one has been found
-										and timeToImpact < closestTimeToImpact then -- target the closest projectile
-										--Log("  Best target so far, impact " .. timeToImpact .. " self " .. timeToSelf)
-										closestTimeToImpact = timeToImpact
-										bestTarget = v
-										best_pos = pos
-										best_vel = MissileVelToTarget(projectileType, projectileId, vel, pos)
+                                    if lineOfSight -- must be able to shoot it
+                                        and (danger or danger == dangerOfImpact) -- ignore unthreatening projectiles if one has been found
+                                        and timeToImpact < closestTimeToImpact then -- target the closest projectile
+                                        --Log("  Best target so far, impact " .. timeToImpact .. " self " .. timeToSelf)
+                                        closestTimeToImpact = timeToImpact
+                                        bestTarget = v
+                                        best_pos = pos
+                                        best_vel = MissileVelToTarget(projectileType, projectileId, vel, pos)
 
-										if ShowAntiAirLockdowns and danger and DoorCountAI(id) > 0 then
-											SpawnLine(weaponPos, pos, Red(128), 2.5)
-										end
-									end
-									dangerOfImpact = dangerOfImpact or danger
+                                        if ShowAntiAirLockdowns and danger and DoorCountAI(id) > 0 then
+                                            SpawnLine(weaponPos, pos, Red(128), 2.5)
+                                        end
+                                    end
+                                    dangerOfImpact = dangerOfImpact or danger
 
-									-- optimise: avoid further ray casts
-									if dangerOfImpact then
-										break
-									end
-								end
-							end
-						end
-					end
+                                    -- optimise: avoid further ray casts
+                                    if dangerOfImpact then
+                                        break
+                                    end
+                                end
+                            end
+                        end
+                    end
 
-					-- shoot at the closest projectile found
-					if bestTarget and IsWeaponReadyToFire(id) then
-						local uncertainty = 1
-						local maxUncertainty = 1
+                    -- shoot at the closest projectile found
+                    if bestTarget and IsWeaponReadyToFire(id) then
+                        local uncertainty = 1
+                        local maxUncertainty = 1
 
-						--Log("best_pos " .. tostring(best_pos) .. " target node " .. bestTarget.ProjectileNodeId)
+                        --Log("best_pos " .. tostring(best_pos) .. " target node " .. bestTarget.ProjectileNodeId)
 
-						local projectileGroup = {}
-						if closestTimeToImpact > maxUncertainty then
-							-- search for nearby targets and aim for the middle
-							local accPos = Vec3()
-							local accVel = Vec3()
-							local count = 0
-							for k,v in ipairs(data.TrackedProjectiles) do
-								--Log("  checking projectile " .. tostring(v.ProjectileNodeId))
-								if AA_IsMissileAttacking(v.ProjectileNodeId) then
-									local pos, vel = PredictProjectilePos(v.ProjectileNodeId, closestTimeToImpact)
-									--Log("    is attacking, time " .. closestTimeToImpact .. " pos " .. tostring(pos))
-									if Vec3Length(pos - best_pos) < 500 then
-										--Log("      within range")
-										local projectileType = AA_GetNodeProjectileType(v.ProjectileNodeId)
-										accPos = accPos + pos
-										accVel = accVel + MissileVelToTarget(projectileType, v.ProjectileNodeId, vel, pos)
-										count = count + 1
-										table.insert(projectileGroup, v)
-									end
-								end
-							end
+                        local projectileGroup = {}
+                        if closestTimeToImpact > maxUncertainty then
+                            -- search for nearby targets and aim for the middle
+                            local accPos = Vec3()
+                            local accVel = Vec3()
+                            local count = 0
+                            for k,v in ipairs(data.TrackedProjectiles) do
+                                --Log("  checking projectile " .. tostring(v.ProjectileNodeId))
+                                if AA_IsMissileAttacking(v.ProjectileNodeId) then
+                                    local pos, vel = PredictProjectilePos(v.ProjectileNodeId, closestTimeToImpact)
+                                    --Log("    is attacking, time " .. closestTimeToImpact .. " pos " .. tostring(pos))
+                                    if Vec3Length(pos - best_pos) < 500 then
+                                        --Log("      within range")
+                                        local projectileType = AA_GetNodeProjectileType(v.ProjectileNodeId)
+                                        accPos = accPos + pos
+                                        accVel = accVel + MissileVelToTarget(projectileType, v.ProjectileNodeId, vel, pos)
+                                        count = count + 1
+                                        table.insert(projectileGroup, v)
+                                    end
+                                end
+                            end
 
-							if ShowAntiAirTargets and count > 1 then
-								SpawnCircle(best_pos, 500, White(64), data.AntiAirPeriod)
-							end
+                            if ShowAntiAirTargets and count > 1 then
+                                SpawnCircle(best_pos, 500, White(64), data.AntiAirPeriod)
+                            end
 
-							if count > 0 then
-								best_pos = (1/count)*accPos;
-								best_vel = (1/count)*accVel;
-							end
-						end
+                            if count > 0 then
+                                best_pos = (1/count)*accPos;
+                                best_vel = (1/count)*accVel;
+                            end
+                        end
 
-						local v = bestTarget
-						local pos = best_pos
-						local vel = best_vel
-						local timeToImpact = closestTimeToImpact
-						--LogEnum("Targeting projectile " .. v.ProjectileNodeId .. " with time to impact " .. closestTimeToImpact)
+                        local v = bestTarget
+                        local pos = best_pos
+                        local vel = best_vel
+                        local timeToImpact = closestTimeToImpact
+                        --LogEnum("Targeting projectile " .. v.ProjectileNodeId .. " with time to impact " .. closestTimeToImpact)
 
-						local projectileSaveName = AA_GetNodeProjectileSaveName(v.ProjectileNodeId)
-						local projectileType = AA_GetNodeProjectileType(v.ProjectileNodeId)
-						local blocked = false
+                        local projectileSaveName = AA_GetNodeProjectileSaveName(v.ProjectileNodeId)
+                        local projectileType = AA_GetNodeProjectileType(v.ProjectileNodeId)
+                        local blocked = false
 
-						if timeToImpact < maxUncertainty then
-							-- become more certain as the projectile gets closer
-							uncertainty = uncertainty*(timeToImpact/maxUncertainty)
-						end
+                        if timeToImpact < maxUncertainty then
+                            -- become more certain as the projectile gets closer
+                            uncertainty = uncertainty*(timeToImpact/maxUncertainty)
+                        end
 
-						-- aim at projected target position in the future, with some deviation for balance
-						local right = Vec3Unit(Vec3(-vel.y, vel.x))
-						pos = pos + uncertainty*GetNormalFloat(data.AntiAirLateralStdDev[projectileType], 0, "TryShootDownProjectiles LateralDev " .. id)*right
+                        -- aim at projected target position in the future, with some deviation for balance
+                        local right = Vec3Unit(Vec3(-vel.y, vel.x))
+                        pos = pos + uncertainty*GetNormalFloat(data.AntiAirLateralStdDev[projectileType], 0, "TryShootDownProjectiles LateralDev " .. id)*right
 
-						if ShowAntiAirTargets then
-							SpawnLine(best_pos, pos, White(128), data.AntiAirPeriod)
-						end
+                        if ShowAntiAirTargets then
+                            SpawnLine(best_pos, pos, White(128), data.AntiAirPeriod)
+                        end
 
-						if ShowAntiAirTargets then
-							SpawnEffect("effects/weapon_blocked.lua", best_pos)
-							SpawnEffect("effects/weapon_blocked.lua", pos)
-						end
+                        if ShowAntiAirTargets then
+                            SpawnEffect("effects/weapon_blocked.lua", best_pos)
+                            SpawnEffect("effects/weapon_blocked.lua", pos)
+                        end
 
-						ReserveWeaponAim(id, 1.5*data.AntiAirPeriod)
+                        ReserveWeaponAim(id, 1.5*data.AntiAirPeriod)
 
-						-- some weapons should not open doors to shoot down some projectiles (e.g. mini-guns against mortars) unless they are protected
-						-- also if there isn't much time left don't open the door
-						local slowDoorsBlock = data.AntiAirOpenDoor[type] ~= nil and data.AntiAirOpenDoor[type][projectileSaveName] == false
-						local power = data.AntiAirPower[type] or 1
-						local doorDelay = 0
+                        -- some weapons should not open doors to shoot down some projectiles (e.g. mini-guns against mortars) unless they are protected
+                        -- also if there isn't much time left don't open the door
+                        local slowDoorsBlock = data.AntiAirOpenDoor[type] ~= nil and data.AntiAirOpenDoor[type][projectileSaveName] == false
+                        local power = data.AntiAirPower[type] or 1
+                        local doorDelay = 0
 
-						local fireResult = FireWeaponWithPower(id, pos, 0, FIREWEAPON_STDDEVTEST_DEFAULT, fireTestFlags, power)
-						if fireResult == FIRE_DOOR then
-							doorDelay = AntiAirDoorDelay
-						end
+                        local fireResult = FireWeaponWithPower(id, pos, 0, FIREWEAPON_STDDEVTEST_DEFAULT, fireTestFlags, power)
+                        if fireResult == FIRE_DOOR then
+                            doorDelay = AntiAirDoorDelay
+                        end
 
-						if dangerOfImpact or
-							slowDoorsBlock or
-							data.AntiAirLockDown[id] then
+                        if dangerOfImpact or
+                            slowDoorsBlock or
+                            data.AntiAirLockDown[id] then
 
-							blocked = fireResult ~= FIRE_SUCCESS
+                            blocked = fireResult ~= FIRE_SUCCESS
 
-							--if blocked then
-								--LogDetail(id .. " blocked: " .. fireResult .. " danger " .. tostring(dangerOfImpact))
-							--end
+                            --if blocked then
+                                --LogDetail(id .. " blocked: " .. fireResult .. " danger " .. tostring(dangerOfImpact))
+                            --end
 
-							-- see if the door is high to make an exception to the open door setting
-							if fireResult == FIRE_DOOR and not dangerOfImpact and not data.AntiAirLockDown[id] then
-								local nA = GetRayHitLinkNodeIdA()
-								local nB = GetRayHitLinkNodeIdB()
-								--LogDetail(id .. " testing door: " .. nA .. ", " .. nB)
-								if nA > 0 and nB > 0 then
-									local posA = AA_NodePosition(nA)
-									local posB = AA_NodePosition(nB)
-									if posA.y < weaponPos.y - 10 and posB.y < weaponPos.y - 10 then
-										--Log(id .. " opening high door for " .. projectileType)
-										blocked = false
-									end
-								end
-							end
-							--LogDetail(type .. " in danger or does not open doors for " .. projectileType .. ", blocked = " .. tostring(blocked))
-						else
-							-- don't aim at things we can't see
-							local rayFlags = RAY_EXCLUDE_CONSTRUCTION | RAY_NEUTRAL_BLOCKS | RAY_PORTAL_BLOCKS
-							local rayHit = CastRayFromDevice(id, pos, 1, rayFlags, fieldBlockFlags)
-							blocked = rayHit ~= RAY_HIT_NOTHING
-						end
-						
-						if not blocked then
-							--local projSaveName = GetWeaponSelectedAmmo(id)
-							--local projParams = GetProjectileParams(projSaveName, teamId)
+                            -- see if the door is high to make an exception to the open door setting
+                            if fireResult == FIRE_DOOR and not dangerOfImpact and not data.AntiAirLockDown[id] then
+                                local nA = GetRayHitLinkNodeIdA()
+                                local nB = GetRayHitLinkNodeIdB()
+                                --LogDetail(id .. " testing door: " .. nA .. ", " .. nB)
+                                if nA > 0 and nB > 0 then
+                                    local posA = AA_NodePosition(nA)
+                                    local posB = AA_NodePosition(nB)
+                                    if posA.y < weaponPos.y - 10 and posB.y < weaponPos.y - 10 then
+                                        --Log(id .. " opening high door for " .. projectileType)
+                                        blocked = false
+                                    end
+                                end
+                            end
+                            --LogDetail(type .. " in danger or does not open doors for " .. projectileType .. ", blocked = " .. tostring(blocked))
+                        else
+                            -- don't aim at things we can't see
+                            local rayFlags = RAY_EXCLUDE_CONSTRUCTION | RAY_NEUTRAL_BLOCKS | RAY_PORTAL_BLOCKS
+                            local rayHit = CastRayFromDevice(id, pos, 1, rayFlags, fieldBlockFlags)
+                            blocked = rayHit ~= RAY_HIT_NOTHING
+                        end
+                        
+                        if not blocked then
+                            --local projSaveName = GetWeaponSelectedAmmo(id)
+                            --local projParams = GetProjectileParams(projSaveName, teamId)
 
-							--[[if hasbit(projParams.FieldType, FIELD2_DECOY_ENEMY_BIT) then
-								pos = AimDecoyAtEnemy(pos, id, projParams, fieldBlockFlags)
-							end]]
+                            --[[if hasbit(projParams.FieldType, FIELD2_DECOY_ENEMY_BIT) then
+                                pos = AimDecoyAtEnemy(pos, id, projParams, fieldBlockFlags)
+                            end]]
 
-							local stdDev = data.AntiAirErrorStdDev[type]
-							--LogDetail("Shooting down projectile " .. v.ProjectileNodeId .. " weapon " .. id)
-							local result = FireWeaponWithPower(id, pos, stdDev or 0, FIREWEAPON_STDDEVTEST_DEFAULT, FIREFLAG_EXTRACLEARANCE, power)
-							if result == FIRE_SUCCESS then
-								-- close door in a little delay once the projectile is lost
-								if AntiAirClaimsProjectile[type] then
-									v.Claims[id] = true
-									for i,p in pairs(projectileGroup) do
-										p.Claims[id] = true
-									end
-								end
-								InsertUnique(v.AntiAirWeapons, id)
-								data.NextAntiAirIndex = index + 1
+                            local stdDev = data.AntiAirErrorStdDev[type]
+                            --LogDetail("Shooting down projectile " .. v.ProjectileNodeId .. " weapon " .. id)
+                            local result = FireWeaponWithPower(id, pos, stdDev or 0, FIREWEAPON_STDDEVTEST_DEFAULT, FIREFLAG_EXTRACLEARANCE, power)
+                            if result == FIRE_SUCCESS then
+                                -- close door in a little delay once the projectile is lost
+                                if AntiAirClaimsProjectile[type] then
+                                    v.Claims[id] = true
+                                    for i,p in pairs(projectileGroup) do
+                                        p.Claims[id] = true
+                                    end
+                                end
+                                InsertUnique(v.AntiAirWeapons, id)
+                                data.NextAntiAirIndex = index + 1
 
-								--if IsSlowFiringAntiAir(id) then
-									local timeRemaining = GetWeaponFiringTimeRemaining(id)
-									TryCloseWeaponDoorsWithDelay(id, "slow firing AA ", timeRemaining)
-								--end
+                                --if IsSlowFiringAntiAir(id) then
+                                    local timeRemaining = GetWeaponFiringTimeRemaining(id)
+                                    TryCloseWeaponDoorsWithDelay(id, "slow firing AA ", timeRemaining)
+                                --end
 
-								-- give a chance to keep firing anti-air weapons
+                                -- give a chance to keep firing anti-air weapons
                         if type == "machinegun" then
                            if GetRandomFloat(0, 100, "TryShootDownProjectiles Persist " .. id) < 40 then
                               break
                            end
-								elseif GetRandomFloat(0, 100, "TryShootDownProjectiles Persist " .. id) < 90 then -- was 50
-									break
-								end
-							else
-								if result == FIRE_DOOR then
-									-- door will be opening, will try again soon
-							
-									-- remember to close doors that were opened but didn't have an opportunity to close
-									InsertUnique(v.AntiAirWeapons, id)
-								end
-								--LogDetail(FIRE[result])
-							end
-						end
-					end
+                                elseif GetRandomFloat(0, 100, "TryShootDownProjectiles Persist " .. id) < 90 then -- was 50
+                                    break
+                                end
+                            else
+                                if result == FIRE_DOOR then
+                                    -- door will be opening, will try again soon
+                            
+                                    -- remember to close doors that were opened but didn't have an opportunity to close
+                                    InsertUnique(v.AntiAirWeapons, id)
+                                end
+                                --LogDetail(FIRE[result])
+                            end
+                        end
+                    end
 
-					if dangerOfImpact and DoorCountAI(id) > 0 then
-						local timeRemaining = GetWeaponFiringTimeRemaining(id)
-						if bestTarget then
-							--LogDetail(type .. " has danger of impact from " .. bestTarget.ProjectileNodeId .. " closing doors of " .. id)
-							data.AntiAirLockDown[id] = { data.gameFrame, bestTarget.ProjectileNodeId }
-						end
-						ScheduleCall(timeRemaining, TryCloseWeaponDoors, id)
-					end
-				end
+                    if dangerOfImpact and DoorCountAI(id) > 0 then
+                        local timeRemaining = GetWeaponFiringTimeRemaining(id)
+                        if bestTarget then
+                            --LogDetail(type .. " has danger of impact from " .. bestTarget.ProjectileNodeId .. " closing doors of " .. id)
+                            data.AntiAirLockDown[id] = { data.gameFrame, bestTarget.ProjectileNodeId }
+                        end
+                        ScheduleCall(timeRemaining, TryCloseWeaponDoors, id)
+                    end
+                end
 
-				data.NextAntiAirIndex = index + 1
-			end
-		end
-	end
+                data.NextAntiAirIndex = index + 1
+            end
+        end
+    end
 
-	ScheduleCall(data.AntiAirPeriod, TryShootDownProjectiles)
+    ScheduleCall(data.AntiAirPeriod, TryShootDownProjectiles)
 end
 
 function OnWeaponFired(weaponTeamId, saveName, weaponId, projectileNodeId, projectileNodeIdFrom)
-	if data.gameWinner and data.gameWinner ~= teamId then return end
+    if data.gameWinner and data.gameWinner ~= teamId then return end
 
-	if weaponTeamId%MAX_SIDES == enemyTeamId then
-		local projectileSaveName = GetNodeProjectileSaveName(projectileNodeId)
+    if weaponTeamId%MAX_SIDES == enemyTeamId then
+        local projectileSaveName = GetNodeProjectileSaveName(projectileNodeId)
 
-		if ShootableProjectile[projectileSaveName] then
-		   TrackProjectile(projectileNodeId)
-		end
-	end
+        if ShootableProjectile[projectileSaveName] then
+           TrackProjectile(projectileNodeId)
+        end
+    end
 
-	--[[if data.BuildIntoSmoke then
-		local projType = GetNodeProjectileSaveName(projectileNodeId)
-		if Fort and projType == "smoke" then
-			ScheduleCall(0.5, BuildIntoSmoke, projectileNodeId, 4)
-		end
-	end]]
+    --[[if data.BuildIntoSmoke then
+        local projType = GetNodeProjectileSaveName(projectileNodeId)
+        if Fort and projType == "smoke" then
+            ScheduleCall(0.5, BuildIntoSmoke, projectileNodeId, 4)
+        end
+    end]]
 end
 
 function TrackProjectile(nodeId)
-	--local nodeTeamId = NodeTeam(nodeId) -- returns TEAM_ANY if non-existent
-	--if nodeTeamId%MAX_SIDES == enemyTeamId then -- node may have changed team since firing
-		table.insert(data.TrackedProjectiles, { ProjectileNodeId = nodeId, AntiAirWeapons = {}, Claims = {} })
-	--end
+    --local nodeTeamId = NodeTeam(nodeId) -- returns TEAM_ANY if non-existent
+    --if nodeTeamId%MAX_SIDES == enemyTeamId then -- node may have changed team since firing
+        table.insert(data.TrackedProjectiles, { ProjectileNodeId = nodeId, AntiAirWeapons = {}, Claims = {} })
+    --end
 end
 -------------------------------------------------------
 -- BEGIN fixes by @alexd26 (Discord ID:526090170521616384) --
@@ -1259,9 +1267,9 @@ function RemoveDeviceFromEnemySide(id,saveName)
    --Log("Remove, Enemy: "..enemyTeamId.." "..id.." "..saveName)
    for i=1,#data.DevicesOnEnemyTeam[saveName] do
       if data.DevicesOnEnemyTeam[saveName][i] == id then
-		   table.remove(data.DevicesOnEnemyTeam[saveName],i)
-		   return
-	   end
+           table.remove(data.DevicesOnEnemyTeam[saveName],i)
+           return
+       end
    end
 end
 
@@ -1455,17 +1463,17 @@ end]]
 
 
 function Repair()
-	-- put out any fires if we are the winner
-	if data.gameWinner and data.gameWinner ~= teamId then return end
+    -- put out any fires if we are the winner
+    if data.gameWinner and data.gameWinner ~= teamId then return end
       data.repairDamageThreshold = 1
       data.repairDamageThresholdDevice = 1
 
-		--linkRepairCount = 0
-		EnumerateLinks(teamId, "RepairEnumeratedLink", data.repairDamageThreshold, data.repairDamageThresholdDevice, "", false)
+        --linkRepairCount = 0
+        EnumerateLinks(teamId, "RepairEnumeratedLink", data.repairDamageThreshold, data.repairDamageThresholdDevice, "", false)
 
-	--end
+    --end
 
-	-- Repair ground devices separately as these won't be found in the link enumeration above
+    -- Repair ground devices separately as these won't be found in the link enumeration above
    local deviceCount = GetDeviceCount(teamId)
    for index = 0,deviceCount - 1 do
       local id = GetDeviceId(teamId, index)
@@ -1476,55 +1484,55 @@ function Repair()
       end
    end
 
-	if data.gameEnded then return end
-	
-	ScheduleCall(data.RepairPeriod, Repair)
+    if data.gameEnded then return end
+    
+    ScheduleCall(data.RepairPeriod, Repair)
 end
 
 function RepairEnumeratedLink(nodeA, nodeB, saveName, relativeHealth, stress, segmentsOnFire, deviceId)
-	if relativeHealth < data.repairDamageThreshold or segmentsOnFire > 0 then
-		if nodeA and nodeB then
-			RepairLink(nodeA, nodeB)
-			--linkRepairCount = linkRepairCount + 1
-		end
-	end
-	if deviceId > 0 and not data.MissileLaunching[deviceId] then
-		RepairDevice(deviceId)
-	end
-	
-	-- continue enumeration
-	return true
+    if relativeHealth < data.repairDamageThreshold or segmentsOnFire > 0 then
+        if nodeA and nodeB then
+            RepairLink(nodeA, nodeB)
+            --linkRepairCount = linkRepairCount + 1
+        end
+    end
+    if deviceId > 0 and not data.MissileLaunching[deviceId] then
+        RepairDevice(deviceId)
+    end
+    
+    -- continue enumeration
+    return true
 end
 --base = GetRealTime()
 --if teamId == 102 then Log(""..GetRealTime() - base) end
 --[[
 function FindTarget(weaponId, type)
-	--LogFunction("FindTarget " .. weaponId .. ", " .. (type or "nil"))
-	if data.CustomWeaponPriorities[type] then
-		return FindTargetFromPriorities(weaponId, type, data.CustomWeaponPriorities[type])
-	elseif IsHeavyWeapon[type] then
-		return FindTargetFromPriorities(weaponId, type, data.HeavyArmsPrioritiesOverride or HeavyArmsPriorities)
-	else
-		return FindTargetFromPriorities(weaponId, type, data.SmallArmsPrioritiesOverride or SmallArmsPriorities)
-	end
+    --LogFunction("FindTarget " .. weaponId .. ", " .. (type or "nil"))
+    if data.CustomWeaponPriorities[type] then
+        return FindTargetFromPriorities(weaponId, type, data.CustomWeaponPriorities[type])
+    elseif IsHeavyWeapon[type] then
+        return FindTargetFromPriorities(weaponId, type, data.HeavyArmsPrioritiesOverride or HeavyArmsPriorities)
+    else
+        return FindTargetFromPriorities(weaponId, type, data.SmallArmsPrioritiesOverride or SmallArmsPriorities)
+    end
 end
 
 function FindTargetFromPriorities(weaponId, type, priorities)
-	local firesIndirect = WeaponFiresIndirect[type]
-	local target = FindPriorityTarget(weaponId, type, priorities, not firesIndirect, not firesIndirect)
-	if target or firesIndirect then
-		return target
-	else
-		-- if unable to find a target that would receive direct damage, aim at any desired target with structure in the ways
-		return FindPriorityTarget(weaponId, type, priorities, false, true)
-	end
-	return nil
+    local firesIndirect = WeaponFiresIndirect[type]
+    local target = FindPriorityTarget(weaponId, type, priorities, not firesIndirect, not firesIndirect)
+    if target or firesIndirect then
+        return target
+    else
+        -- if unable to find a target that would receive direct damage, aim at any desired target with structure in the ways
+        return FindPriorityTarget(weaponId, type, priorities, false, true)
+    end
+    return nil
 end]]
 
 -- find target prios and find priority target \/ REPLACED WITH \/  (no more priorities param)
 function FindTarget(weaponId, type)
 
-	local firesIndirect = WeaponFiresIndirect[type]
+    local firesIndirect = WeaponFiresIndirect[type]
    needLineOfSight, needLineToStructure = not firesIndirect, not firesIndirect
    
   if not priorities[type] then Log("Weapon \"" .. type .. "\" has no target priority list. Aborting fire.") return end
@@ -1602,10 +1610,9 @@ function FindTarget(weaponId, type)
          --LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
          
          if not targetObstructed then
-            return targetPos,targetPos
+            return targetPos
          end
       end
-      return targetPos,targetPos
    elseif data.WeaponFireTypeProbabilities.FireAtRandomTargetWithExtraDamageProbability[apple2] < apple then
       --Log("fire At RandomTarget")
       local i=10
@@ -1629,7 +1636,7 @@ function FindTarget(weaponId, type)
             --LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
             
             if not targetObstructed then
-               return targetPos,targetPos
+               return targetPos
                --[[if dmgDealt then
                   targetPriority = priorities[type][k][3] * dmgDealt
                else
@@ -1669,7 +1676,7 @@ function FindTarget(weaponId, type)
             --LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
             
             if not targetObstructed then
-               return targetPos,targetPos
+               return targetPos
                --[[if dmgDealt then
                   targetPriority = priorities[type][k][3] * dmgDealt
                else
@@ -1783,8 +1790,9 @@ function FindTarget(weaponId, type)
       end
       data.FailedAttempts[weaponId] = 0
    else return nil end
-   if rolledForTarget then return bestTarget[GetRandomInteger(1, #bestTarget, "FindPriorityTarget " .. bestTarget[1].x)],bestTarget[GetRandomInteger(1, #bestTarget, "FindPriorityTarget " .. bestTarget[1].x)] end
-   return bestTarget[GetRandomInteger(1, #bestTarget, "FindPriorityTarget " .. bestTarget[1].x)]
+   local target = bestTarget[GetRandomInteger(1, #bestTarget, "FindPriorityTarget " .. bestTarget[1].x)]
+   if rolledForTarget then return target end
+   return target
 
   --TargetRandom = RandomFloat%0.000001*1000000+0.01
 
@@ -1859,13 +1867,13 @@ function IsTargetObstructed(weaponId, weaponType, pos, hitpoints,needLineOfSight
            LogLower("(Lobbed Projectile) ground ray hit terrain")
            return true, false
         end
-        	-- has line of sight
-			-- shoot ray from artificial pos to target pos to check if projectile has enough hp/splash
-			hitType, dmgDealt = CastTargetObstructionRayNew(testPos, pos, hitpoints, rayFlags, weaponType, targetId, weaponId,damageMulti)
+            -- has line of sight
+            -- shoot ray from artificial pos to target pos to check if projectile has enough hp/splash
+            hitType, dmgDealt = CastTargetObstructionRayNew(testPos, pos, hitpoints, rayFlags, weaponType, targetId, weaponId,damageMulti)
 
-			if hitType == data.RAY_HIT_OBSTRUCTED then return true, false end
+            if hitType == data.RAY_HIT_OBSTRUCTED then return true, false end
 
-			return false, dmgDealt
+            return false, dmgDealt
      else
         LogLower("(Lobbed Projectile) no firing solution")
         return true, false
@@ -2104,213 +2112,216 @@ function comparePositions(pos1, pos2)
   return (pos1.x == pos2.x and pos1.y == pos2.y)
 end
 
-function TryFireGun(id, useGroup,index,rdmRollTarget)
-   local rdmRollTarget = rdmRollTarget or nil
-   --if rdmRollTarget then BetterLog(rdmRollTarget) end
-	if data.gameEnded then
-		return
-	end
+function TryFireGun(id,useGroup,index, target, balls)
+   if balls then Log("" .. (target or "NO TARGET AHHH")) end
+    if data.gameEnded then
+        return
+    end
 
-	if not DeviceExists(id) then
-		--LogDetail("TryFireGun device no longer exists")
-		return
-	end
+    if not DeviceExists(id) then
+        --LogDetail("TryFireGun device no longer exists")
+        return
+    end
 
-	local type = GetDeviceType(id)
+    local type = GetDeviceType(id)
 
-	--LogFunction("TryFireGun " .. type .. " Id " .. id)
+    --LogFunction("TryFireGun " .. type .. " Id " .. id)
 
-	if data.ActionQueue[id] then
-		Log("Processing action queue")
-		return _G[data.ActionQueue[id].ProcessFunction](data.ActionQueue[id])
-	end
-	
-	local group = useGroup
-	if group then
-		--LogDetail("  Attempting repeated fire of group, validating. leader " .. type)
-		
-		for k = #group,2,-1 do
-			if not DeviceExists(group[k]) then
-				--LogDetail("  lost group member " .. group[k])
-				table.remove(group, k)
-			end
-		end
-	else
-		--[[for i = 1, ScheduledCallCountOfFunc(TryFireGun) do
-			local attemptedGroup = GetScheduledCallOfFuncParam(TryFireGun, 1, 2)
-			if attemptedGroup then
-				for j = 1, #attemptedGroup do
-					if attemptedGroup[j] == id then
-						--LogDetail("  TryFireGun of " .. id .. " aborted: part of a group " .. type)
-						return
-					end
-				end
-			end
-		end]]--
+    if data.ActionQueue[id] then
+        Log("Processing action queue")
+        return _G[data.ActionQueue[id].ProcessFunction](data.ActionQueue[id])
+    end
+    
+    local group = useGroup
+    if group then
+        --LogDetail("  Attempting repeated fire of group, validating. leader " .. type)
+        
+        for k = #group,2,-1 do
+            if not DeviceExists(group[k]) then
+                --LogDetail("  lost group member " .. group[k])
+                table.remove(group, k)
+            end
+        end
+    else
+        --[[for i = 1, ScheduledCallCountOfFunc(TryFireGun) do
+            local attemptedGroup = GetScheduledCallOfFuncParam(TryFireGun, 1, 2)
+            if attemptedGroup then
+                for j = 1, #attemptedGroup do
+                    if attemptedGroup[j] == id then
+                        --LogDetail("  TryFireGun of " .. id .. " aborted: part of a group " .. type)
+                        return
+                    end
+                end
+            end
+        end]]--
 
-		group = { id }
-	end
+        group = { id }
+    end
 
-	local probability = data.OffensiveFireProbability[type]
+    local probability = data.OffensiveFireProbability[type]
 
-	--Log("TryFireGun " .. type .. ": probability " .. tostring(probability))
+    --Log("TryFireGun " .. type .. ": probability " .. tostring(probability))
 
-	-- don't use defensive weapons for offence
-	if not useGroup and probability and GetRandomFloat(0, 1, "TryFireGun 1 " .. id) > probability then
-		--Log("Aborting fire due to random chance")
-		return
-	end
+    -- don't use defensive weapons for offence
+    if not useGroup and probability and GetRandomFloat(0, 1, "TryFireGun 1 " .. id) > probability then
+        --Log("Aborting fire due to random chance")
+        return
+    end
 
-	-- don't try to use weapons painting a target for other weapons
-	-- or it's being used by a human player or reloading
-	if IsSpotter(type, teamId) and (IsWeaponSpotting(id) or data.SpotterInUse[id]) then
-		--LogDetail("Weapon not available (spotting)")
-		return
-	elseif --[[not IsAIDeviceAvailable(id) or]] data.MissileLaunching[id] then
-		--LogDetail("Weapon not available (in use)")
-		return
-	elseif not IsWeaponReadyToFire(id) then
-		TryCloseWeaponGroupDoors(group)
-		--LogDetail("Weapon not available (reloading)")
-		return
-	end
-	
-	local teamResources = GetTeamResources(teamId)
-	if not CanAfford(teamResources - WeaponFireCosts[type]) then
-		--LogDetail("can't afford to fire weapon: resources = " .. teamResources .. ", cost = " .. GetWeaponFireCost(id))
-		TryCloseWeaponGroupDoors(group)
-		return
-	end
+    -- don't try to use weapons painting a target for other weapons
+    -- or it's being used by a human player or reloading
+    if IsSpotter(type, teamId) and (IsWeaponSpotting(id) or data.SpotterInUse[id]) then
+        --LogDetail("Weapon not available (spotting)")
+        return
+    elseif --[[not IsAIDeviceAvailable(id) or]] data.MissileLaunching[id] then
+        --LogDetail("Weapon not available (in use)")
+        return
+    elseif not IsWeaponReadyToFire(id) then
+        TryCloseWeaponGroupDoors(group)
+        --LogDetail("Weapon not available (reloading)")
+        return
+    end
+    
+    local teamResources = GetTeamResources(teamId)
+    if not CanAfford(teamResources - WeaponFireCosts[type]) then
+        --LogDetail("can't afford to fire weapon: resources = " .. teamResources .. ", cost = " .. GetWeaponFireCost(id))
+        TryCloseWeaponGroupDoors(group)
+        return
+    end
 
-	if not useGroup then
-		group = SelectWeaponGroup(id)
-	end
+    if not useGroup then
+        group = SelectWeaponGroup(id)
+    end
    
-   local currentTarget
-	if rdmRollTarget then
-      currentTarget = rdmRollTarget
-   else
-	   currentTarget,toRdmRollTarget = FindTarget(id, type)
+   if not target then
+       target = FindTarget(id, type)
    end
-   rdmRollTarget = toRdmRollTarget or rdmRollTarget or nil
-   BetterLog(rdmRollTarget)
-   --local currentTarget = rdmRollTarget or FindTarget(id, type)
-   --[[local currentTarget, toRdmRollTarget = rdmRollTarget or FindTarget(id, type)
-   rdmRollTarget = toRdmRollTarget or rdmRollTarget or nil]]
-	if currentTarget == nil then
-		--LogDetail("No target")
-		if not data.SpotterInUse[id] and not data.MissileLaunching[id] then
-			ScheduleCall(data.NoTargetCloseDoorDelay, TryCloseWeaponGroupDoors, group)
-		end
-		return
-	end
+   local currentTarget = target
+    if currentTarget == nil then
+        if not data.SpotterInUse[id] and not data.MissileLaunching[id] then
+           ScheduleCall(data.NoTargetCloseDoorDelay, TryCloseWeaponGroupDoors, group)
+        end
+        return
+    end
    groupsize = #group
-	if groupsize > 0 then
-		--LogDetail("Firing group with " .. #group .. " members")
-		local doorsObstructing = false
-		for k = #group,1,-1 do
-			local gid = group[k]
-			type = GetDeviceType(gid)
-			if not RequiresSpotter(type, teamId) then
-				data.offenceBucket = data.offenceBucket + 2
-				--LogDetail("Attempting to open group weapon doors " .. gid .. " of type " .. type)
-				local result = FireWeapon(gid, currentTarget, 0, FIREFLAG_TEST | FIREFLAG_FORCEDOORSOPEN | FIREFLAG_EXTRACLEARANCE)
-				if result == FIRE_DOOR then
-					doorsObstructing = true
-				end
-			end
-		end
-		if doorsObstructing then
-			--LogDetail("  Doors obstructing group, opening. leader " .. type)
-			ScheduleCall(data.GroupDoorOpenDelay, TryFireGun, id, group,index,rdmRollTarget)
-			return
-		end
+   if balls then Log("hehe " .. groupsize .. " " .. currentTarget) BetterLog(group) end
+    if groupsize > 0 then
+       if balls then Log("CHECKING GROUP") end
+        --LogDetail("Firing group with " .. #group .. " members")
+        --[[local doorsObstructing = false
+        for k = #group,1,-1 do
+            local gid = group[k]
+            type = GetDeviceType(gid)
+            if not RequiresSpotter(type, teamId) then
+                data.offenceBucket = data.offenceBucket + 2
+                --LogDetail("Attempting to open group weapon doors " .. gid .. " of type " .. type)
+                Log("" .. gid .. " FIRING WEAPON AT " .. currentTarget)
+                local result = FireWeapon(gid, currentTarget, 0, FIREFLAG_TEST | FIREFLAG_FORCEDOORSOPEN | FIREFLAG_EXTRACLEARANCE)
+                Log("RESULT: " .. result)
+                if result == FIRE_DOOR then
+                   doorsObstructing = true
+                end
+            end
+        end
+        if doorsObstructing then
+            --LogDetail("  Doors obstructing group, opening. leader " .. type)
+            Log("HIT DOOR, RECALLING FUNCTION WITH " .. currentTarget)
+            ScheduleCall(data.GroupDoorOpenDelay, TryFireGun, id, group,index, currentTarget)
+            return
+        end]]--
 
-		for k = groupsize,1,-1 do
-			local gid = group[k]
-			type = GetDeviceType(gid)
-			if not RequiresSpotter(type, teamId) then
-				data.offenceBucket = data.offenceBucket + 2
-				--LogDetail("Attempting to fire group weapon " .. gid .. " of type " .. type)
-				local result = FireWeapon(gid, currentTarget, 0, FIREFLAG_EXTRACLEARANCE)
-				--local result = FireWeaponHandler(gid, type, currentTarget, data.FireErrorStdDevOverride[type] or FireErrorStdDev[type] or data.FireStdDevDefault, data.FireWeaponHandlerFireFlags)
-				if result == FIRE_SUCCESS then
-					--LogDetail("Fired weapon " .. gid .. " of type " .. type)
-					-- close door in a little delay
-					TryCloseWeaponDoorsWithDelay(gid, "TryFireGun 2 door ", data.CloseDoorDelay[type])
-					data.offencePoints = data.offencePoints - 1
-               if groupsize == 1 then
-                  ScheduleCall(GetWeaponReloadPeriodById(id)+0.2,UpdateWeapon,index)
-               end
-				elseif result == FIRE_DOOR then
-					--LogDetail("  Door hit, retry single weapon " .. gid)
-					-- door will be opening, try again soon
-					ScheduleCall(data.GroupDoorOpenDelay, TryFireGun, gid, group, index,rdmRollTarget)
-				else
-					--LogError(FIRE[result] .. ": close doors after failure")
-					TryCloseWeaponDoorsWithDelay(gid, "TryFireGun 3 door ")
-				end
-				table.remove(group, k)
-			end
-		end
-		-- remaining members require painting
-		if #group > 0 then
-			PaintTarget(group, currentTarget)
-		end
-	end
+        for k = groupsize,1,-1 do
+            local gid = group[k]
+            type = GetDeviceType(gid)
+            if not RequiresSpotter(type, teamId) then
+                data.offenceBucket = data.offenceBucket + 2
+                --LogDetail("Attempting to fire group weapon " .. gid .. " of type " .. type)
+                Log("FIRING WEAPON AT AT " .. currentTarget)
+                local result = FireWeapon(gid, currentTarget, 0, FIREFLAG_FORCEDOORSOPEN | FIREFLAG_EXTRACLEARANCE)
+                Log("RESULT: " .. result)
+                --local result = FireWeaponHandler(gid, type, currentTarget, data.FireErrorStdDevOverride[type] or FireErrorStdDev[type] or data.FireStdDevDefault, data.FireWeaponHandlerFireFlags)
+                if result == FIRE_SUCCESS then
+                    --LogDetail("Fired weapon " .. gid .. " of type " .. type)
+                    -- close door in a little delay
+                    Log("Fire success, closing doors")
+                    TryCloseWeaponDoorsWithDelay(gid, "TryFireGun 2 door ", data.CloseDoorDelay[type])
+                    data.offencePoints = data.offencePoints - 1
+                   if groupsize == 1 then
+                       ScheduleCall(GetWeaponReloadPeriodById(id)+0.2,UpdateWeapon,index)
+                   end
+                elseif result == FIRE_DOOR then
+                    --LogDetail("  Door hit, retry single weapon " .. gid)
+                    -- door will be opening, try again soon
+                   Log("HIT DOOR, RECALLING FUNCTION WITH " .. currentTarget)
+                   Log("delay: " .. data.GroupDoorOpenDelay .. " " .. gid .. " " .. index)
+                   BetterLog(group)
+                    ScheduleCall(data.GroupDoorOpenDelay, TryFireGun, id, nil, index,currentTarget, true)
+                else
+                    --LogError(FIRE[result] .. ": close doors after failure")
+                    Log("Fire failed, closing doors")
+                    TryCloseWeaponDoorsWithDelay(gid, "TryFireGun 3 door ")
+                end
+                table.remove(group, k)
+            end
+        end
+        -- remaining members require painting
+        if #group > 0 then
+            PaintTarget(group, currentTarget)
+        end
+    end
 end
 
 function SelectWeaponGroup(id)
-	local weaponCount = GetWeaponCount(teamId)
-	local group = { id }
-	local weaponTypeLeader = GetDeviceType(id)
+    local weaponCount = GetWeaponCount(teamId)
+    local group = { id }
+    local weaponTypeLeader = GetDeviceType(id)
    local totalCost = WeaponFireCosts[weaponTypeLeader] or Value(0,0)
-	local weaponAffinity = data.GroupingAffinity[weaponTypeLeader]
-	local offencePoints = data.offencePoints - 1
-	local teamResources = GetTeamResources(teamId)
+    local weaponAffinity = data.GroupingAffinity[weaponTypeLeader]
+    local offencePoints = data.offencePoints - 1
+    local teamResources = GetTeamResources(teamId)
 
-	--LogDetail("Trying to group " .. id .. " of " .. weaponTypeLeader)
+    --LogDetail("Trying to group " .. id .. " of " .. weaponTypeLeader)
 
-	for index = 0,weaponCount - 1 do
-		local weaponId = GetWeaponId(teamId, index)
-		local weaponType = GetDeviceType(weaponId)
-		local weaponFireCost = WeaponFireCosts[weaponType] or Value(0,0)--GetWeaponFireCost(weaponId)
-		local fireProbDuringReload = data.FireDuringRebuildProbability[weaponType] or 0
-		local weaponAffinityOfType = weaponAffinity and weaponAffinity[weaponType] or 0
-		if data.ResourceStarved then
-			fireProbDuringReload = data.StarvedProbabilityFactor*fireProbDuringReload
-		end
-		LogDetail("  testing " .. weaponId .. " of " .. GetDeviceType(weaponId) .. " for membership, affinity " .. tostring(weaponAffinityOfType))
-		if #group < data.maxGroupSize and weaponId ~= id
-			and not data.MissileLaunching[weaponId]
-			and ((not rebuilding and not data.ResourceStarved) or GetRandomFloat(0,1,"SelectWeaponGroup 1 " .. id) <= fireProbDuringReload)
-			and weaponAffinityOfType and GetRandomFloat(0,1,"SelectWeaponGroup 2 " .. id) <= weaponAffinityOfType
-			and IsWeaponReadyToFire(weaponId)
-			--[[and IsDeviceAvailable(weaponId)]]
-			and CanAfford(teamResources - totalCost - weaponFireCost)
-			and offencePoints >= 1 then
-			LogDetail("  found group member " .. weaponId .. " affinity " .. tostring(weaponAffinityOfType))
-			-- add slave to group and pass to PaintTarget
-			table.insert(group, weaponId)
-			totalCost = totalCost + weaponFireCost
-			offencePoints = offencePoints - 1
-		--[[elseif IsDummy(weaponId) then
-			LogDetail("  dummy")]]
-		elseif not IsWeaponReadyToFire(weaponId) then
-			--LogDetail("  reloading")
-		elseif not CanAfford(teamResources - totalCost - weaponFireCost) then
-			--LogDetail("  can't afford")
-		end
-	end
+    for index = 0,weaponCount - 1 do
+        local weaponId = GetWeaponId(teamId, index)
+        local weaponType = GetDeviceType(weaponId)
+        local weaponFireCost = WeaponFireCosts[weaponType] or Value(0,0)--GetWeaponFireCost(weaponId)
+        local fireProbDuringReload = data.FireDuringRebuildProbability[weaponType] or 0
+        local weaponAffinityOfType = weaponAffinity and weaponAffinity[weaponType] or 0
+        if data.ResourceStarved then
+            fireProbDuringReload = data.StarvedProbabilityFactor*fireProbDuringReload
+        end
+        LogDetail("  testing " .. weaponId .. " of " .. GetDeviceType(weaponId) .. " for membership, affinity " .. tostring(weaponAffinityOfType))
+        if #group < data.maxGroupSize and weaponId ~= id
+            and not data.MissileLaunching[weaponId]
+            and ((not rebuilding and not data.ResourceStarved) or GetRandomFloat(0,1,"SelectWeaponGroup 1 " .. id) <= fireProbDuringReload)
+            and weaponAffinityOfType and GetRandomFloat(0,1,"SelectWeaponGroup 2 " .. id) <= weaponAffinityOfType
+            and IsWeaponReadyToFire(weaponId)
+            --[[and IsDeviceAvailable(weaponId)]]
+            and CanAfford(teamResources - totalCost - weaponFireCost)
+            and offencePoints >= 1 then
+            LogDetail("  found group member " .. weaponId .. " affinity " .. tostring(weaponAffinityOfType))
+            -- add slave to group and pass to PaintTarget
+            table.insert(group, weaponId)
+            totalCost = totalCost + weaponFireCost
+            offencePoints = offencePoints - 1
+        --[[elseif IsDummy(weaponId) then
+            LogDetail("  dummy")]]
+        elseif not IsWeaponReadyToFire(weaponId) then
+            --LogDetail("  reloading")
+        elseif not CanAfford(teamResources - totalCost - weaponFireCost) then
+            --LogDetail("  can't afford")
+        end
+    end
 
-	if #group ~= 1 or weaponAffinity == nil or weaponAffinity["alone"] == nil or GetRandomFloat(0,1,"SelectWeaponGroup 3 " .. id) <= weaponAffinity["alone"] then
-		--LogEnum("returning group with " .. #group .. " members")
-	else
-		group = {}
-		--LogDetail("avoiding firing " .. GetDeviceType(id) .. " alone")
-	end
-	
-	return group -- empty group, don't fire
+    if #group ~= 1 or weaponAffinity == nil or weaponAffinity["alone"] == nil or GetRandomFloat(0,1,"SelectWeaponGroup 3 " .. id) <= weaponAffinity["alone"] then
+        --LogEnum("returning group with " .. #group .. " members")
+    else
+        group = {}
+        --LogDetail("avoiding firing " .. GetDeviceType(id) .. " alone")
+    end
+    
+    return group -- empty group, don't fire
 end
 
 -- custom function by @cronkhinator for TargetObstruction check
