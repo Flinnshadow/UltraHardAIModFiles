@@ -1825,7 +1825,7 @@ function LogTables(Table,IndentLevel)
  -- float dmgDealt if splashRequired (formula: 1 - distanceToTarget/SplashRadius)
  function IsTargetObstructed(weaponId, weaponType, pos, hitpoints,needLineOfSight,needLineToStructure, targetId,damageMulti)
    --LogLower("weaponId: " .. weaponId .. ", weaponType: " .. weaponType .. ", line of sight: " .. tostring(needLineOfSight) .. ", line to structure: " .. tostring(needLineToStructure))
-   
+   if pos.x == 0 and pos.y == 0 then return true, false end
    
    -- Ray casting fix by @cronkhinator (Discord ID: 165842061055098880)
    -- Makes AI fire much more consistently
