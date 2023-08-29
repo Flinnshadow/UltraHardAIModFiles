@@ -297,6 +297,19 @@ function LogTables(Table,IndentLevel)
    ["buzzsaw"] = 0,
    ["magnabeam"] = 0,
  }
+
+ data.UpgradeOf =
+ {
+   ["minigun"] = "machinegun",
+   ["mortar2"] = "mortar",
+   ["rocket"] = "rocketemp",
+   ["turbine2"] = "turbine",
+   ["mine2"] = "mine",
+   ["sniper2"] = "sniper",
+   ["shotgun"] = "flak",
+   ["missile2"] = "missile",
+   ["missile2inv"] = "missileinv",
+ }
  
  data.OffensiveFireProbability["sniper"] = 1
  data.OffensiveFireProbability["machinegun"] = 0
@@ -448,10 +461,10 @@ function LogTables(Table,IndentLevel)
              local delay = GetNormalFloat(data.ConstructionPeriodStdDev, data.ConstructionPeriodMean, "UpdateAI construction delay")
              if delay < data.ConstructionPeriodMin then delay = data.ConstructionPeriodMin end
              data.pauseTime = data.gameTime + delay
-             LogDetail("Resuming construction: pausing in " .. delay .. " seconds")
+             --LogDetail("Resuming construction: pausing in " .. delay .. " seconds")
          else
              -- wait until we have reached the resume time
-             LogEnum("paused: " .. data.resumeTime - data.gameTime .. " seconds to go")
+             --LogEnum("paused: " .. data.resumeTime - data.gameTime .. " seconds to go")
              paused = true
          end
      end
@@ -460,14 +473,14 @@ function LogTables(Table,IndentLevel)
          -- build the given fort in sequence
          while Fort and data.fortIndex <= #Fort do
              local action = Fort[data.fortIndex]
-             LogEnum("action[" .. data.fortIndex .. "] = " .. ACTION[action.Type])
+             --LogEnum("action[" .. data.fortIndex .. "] = " .. ACTION[action.Type])
              local result, skip = ExecuteFortAction(action, data.fortIndex)
              if result then
                  ResetFrustration(data.fortIndex)
                  data.fortIndex = data.fortIndex + 1
                  if not skip then break end
              elseif IsFrustrated(data.fortIndex) then
-                 LogDetail("Proceeding past frustrated action, rebuild later")
+                 --LogDetail("Proceeding past frustrated action, rebuild later")
                  data.Rebuild[data.fortIndex] = true
                  data.fortIndex = data.fortIndex + 1
                  if not skip then break end
@@ -494,9 +507,9 @@ function LogTables(Table,IndentLevel)
                      data.pausePeriod = data.NoConstructionPauseFactor*data.pausePeriod
                  end
                  data.resumeTime = data.gameTime + data.pausePeriod
-                 LogDetail("Pausing construction. Resuming in " .. data.pausePeriod .. " seconds.")
+                 --LogDetail("Pausing construction. Resuming in " .. data.pausePeriod .. " seconds.")
              else
-                 LogEnum("executing: pause in " .. data.pauseTime - data.gameTime .. " seconds")
+                 --LogEnum("executing: pause in " .. data.pauseTime - data.gameTime .. " seconds")
              end
          end
      end
@@ -1322,7 +1335,10 @@ function LogTables(Table,IndentLevel)
  function OnDeviceCreated(deviceTeamId, deviceId, saveName, nodeA, nodeB, t, upgradedId)
    --Log("d"..deviceId)
    if deviceTeamId%100 == enemyTeamId then
-      AddDeviceToEnemySide(deviceId,saveName)
+      if upgradedId > 0 then
+         RemoveDeviceFromEnemySide(upgradedId, data.UpgradeOf[saveName])
+      end
+      AddDeviceToEnemySide(deviceId, saveName)
    end
    if data.gameEnded or data.HumanAssist then return end
  
@@ -1334,6 +1350,9 @@ function LogTables(Table,IndentLevel)
  function OnGroundDeviceCreated(teamId, deviceId, saveName, pos, upgradedId)
    --Log("gd"..deviceId)
    if teamId%100 == enemyTeamId then
+      if upgradedId > 0 then
+         RemoveDeviceFromEnemySide(upgradedId, data.UpgradeOf[saveName])
+      end
       AddDeviceToEnemySide(deviceId,saveName)
    end
  end
@@ -1791,7 +1810,7 @@ function LogTables(Table,IndentLevel)
     end
     --Log("Firing at " .. (bestTarget or "nothing"))
     if #bestTarget > 0 then
-       data.FailedAttempts[weaponId] = 0
+      data.FailedAttempts[weaponId] = math.max((data.FailedAttempts[weaponId] or 0) - 0.3, 0)
     else return nil end
     local target = bestTarget[GetRandomInteger(1, #bestTarget, "FindPriorityTarget " .. bestTarget[1].x)]
     return target
