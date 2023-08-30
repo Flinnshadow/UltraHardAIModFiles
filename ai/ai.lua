@@ -154,7 +154,14 @@ function LogTables(Table,IndentLevel)
  data.ProjectileHitpoints["mortar2"] = 160
 
  data.AntiAirInclude["cannon"] = { ["howitzer"] = true, }
+ data.AntiAirInclude["mortar"] = { ["cannon"] = true, ["howitzer"] = true, }
+ data.AntiAirInclude["mortar2"] = { ["cannon"] = true, ["howitzer"] = true, }
+ data.AntiAirInclude["rocket"] = { ["balls"] = false, } -- to make them shoot at nothing
+ data.AntiAirInclude["rocketemp"] = { ["balls"] = false, } -- to make them shoot at nothing
  data.AntiAirInclude["howitzer"] = { ["balls"] = false, } -- to make them shoot at nothing
+ data.AntiAirInclude["buzzsaw"] = { ["howitzer"] = true, ["missile2"] = true, }
+ --data.AntiAirExclude["mortar"] = { ["mortar"] = true, ["mortar2"] = true, ["missile"] = true, }
+ --data.AntiAirExclude["mortar2"] = { ["mortar"] = true, ["mortar2"] = true, ["missile"] = true, }
  
  data.AntiAirLateralStdDev =
  {
