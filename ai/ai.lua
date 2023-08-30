@@ -1824,7 +1824,7 @@ function LogTables(Table,IndentLevel)
  -- boolean splashRequired to hit
  -- float dmgDealt if splashRequired (formula: 1 - distanceToTarget/SplashRadius)
  function IsTargetObstructed(weaponId, weaponType, pos, hitpoints,needLineOfSight,needLineToStructure, targetId,damageMulti)
-   --LogLower("weaponId: " .. weaponId .. ", weaponType: " .. weaponType .. ", line of sight: " .. tostring(needLineOfSight) .. ", line to structure: " .. tostring(needLineToStructure))
+   --Log("weaponId: " .. weaponId .. ", weaponType: " .. weaponType .. ", line of sight: " .. tostring(needLineOfSight) .. ", line to structure: " .. tostring(needLineToStructure))
    if pos.x == 0 and pos.y == 0 then return true, false end
    
    -- Ray casting fix by @cronkhinator (Discord ID: 165842061055098880)
@@ -1841,14 +1841,16 @@ function LogTables(Table,IndentLevel)
    -- first check if angle to shoot is blocked by friendly structure:
  
    if not AimWeapon(weaponId, pos) then
-      LogLower("  No firing solution")
+      --Log("  No firing solution")
       return true, false
    end
    
    local hardPointPos = GetWeaponHardpointPosition(weaponId)
+   --SpawnCircle(hardPointPos, 100, Red(255), 5)
  
    -- calculate firing angle
    local alpha = GetDeviceAngle(weaponId)
+   if weaponType == "missileinv" or weaponType == "missile2inv" then alpha = -alpha end
    local beta = GetAimWeaponAngle()
    local gamma = alpha - math.pi/2
    local delta = gamma + beta
@@ -1858,6 +1860,7 @@ function LogTables(Table,IndentLevel)
    firingDirection.x = math.cos(delta) * 1000
    firingDirection.y = -math.sin(delta) * 1000
    local aimDirection = hardPointPos + firingDirection
+   --SpawnLine(hardPointPos, aimDirection, Blue(255), 5)
  
    -- check if next 5 tiles inn that direction are free
    if ShowObstructionRays then rayFlags = rayFlags | RAY_DEBUG end
@@ -1877,7 +1880,7 @@ function LogTables(Table,IndentLevel)
       if AimWeapon(weaponId, pos) then
          local hardPointPos = GetWeaponHardpointPosition(weaponId)
          local v = GetAimWeaponSpeed()  -- Initial velocity of the projectile
-         local angle = GetAimWeaponAngle()
+         local angle = delta
          local vx = v * math.cos(angle)
          local vy = v * math.sin(angle)
          local dx = pos.x - hardPointPos.x
