@@ -133,7 +133,7 @@ function LogTables(Table,IndentLevel)
  data.NoTargetCloseDoorDelay = 0.1
  data.GroupDoorOpenDelay = 0
  data.MissileDoorFireDelay = 0.1
- data.RepairPeriod = 0.05
+ data.RepairPeriod = 0.2
  --data.ReplaceDeviceDelayMin = 0
  --data.ReplaceDeviceDelayMax = 0.05 Hard coded
  data.MissileAimingDelay = 0
@@ -303,6 +303,8 @@ function LogTables(Table,IndentLevel)
    ["firebeam"] = 0,
    ["buzzsaw"] = 0,
    ["magnabeam"] = 0,
+   ["rocket"] = 0,
+   ["rocketemp"] = 0,
  }
 
  data.UpgradeOf =
@@ -1833,6 +1835,7 @@ function LogTables(Table,IndentLevel)
  function IsTargetObstructed(weaponId, weaponType, pos, hitpoints,needLineOfSight,needLineToStructure, targetId,damageMulti)
    --Log("weaponId: " .. weaponId .. ", weaponType: " .. weaponType .. ", line of sight: " .. tostring(needLineOfSight) .. ", line to structure: " .. tostring(needLineToStructure))
    if pos.x == 0 and pos.y == 0 then return true, false end
+   if weaponType == "missile" or weaponType == "missileinv" or weaponType == "missile2" or weaponType == "missile2inv" then return false, false end
    
    -- Ray casting fix by @cronkhinator (Discord ID: 165842061055098880)
    -- Makes AI fire much more consistently
@@ -1864,8 +1867,8 @@ function LogTables(Table,IndentLevel)
  
    -- vector in direction of where weapon shoots
    local firingDirection = Vec3()
-   firingDirection.x = math.cos(delta) * 1000
-   firingDirection.y = -math.sin(delta) * 1000
+   firingDirection.x = math.cos(delta) * 1500
+   firingDirection.y = -math.sin(delta) * 1500
    local aimDirection = hardPointPos + firingDirection
    --SpawnLine(hardPointPos, aimDirection, Blue(255), 5)
  
@@ -1988,12 +1991,10 @@ function LogTables(Table,IndentLevel)
       end
       hits[hitPos.x .. " " .. hitPos.y] = true
       source = hitPos + nrmVec
-      hitSaveName = GetRayHitMaterialSaveName()
-      teamHit = GetRayHitTeamId()
    
       if hitType == RAY_HIT_DEVICE then
          local deviceId = GetRayHitDeviceId()
-         if deviceId ~= weaponId and teamHit%MAX_SIDES == teamId%MAX_SIDES then
+         if deviceId ~= weaponId and GetDeviceTeamId(deviceId)%MAX_SIDES == teamId%MAX_SIDES then
              -- hitting friendly device
              return data.RAY_HIT_OBSTRUCTED, 0
          end
@@ -2001,35 +2002,39 @@ function LogTables(Table,IndentLevel)
             --LogLower("Ray hit " .. GetDeviceType(deviceId))
             projectileHP = projectileHP - GetDeviceHitpoints(deviceId)
          end
-      elseif not (teamHit == teamId and GetRayHitDoor()) then -- ignore friendly doors
-          if hitSaveName ~= "backbracing" and hitSaveName ~= "rope" or (data.HitsBackground[weaponType] and teamHit%MAX_SIDES ~= teamId%MAX_SIDES) then -- ignore backbracing unless buzz or howie
-            if (teamHit%MAX_SIDES == teamId%MAX_SIDES) then return data.RAY_HIT_OBSTRUCTED, 0 end -- projectile path collides with friendly entity	
-            --LogLower("Ray hit " .. hitSaveName .. ", projectileHP: " .. projectileHP)		
-            -- ray hits (enemy or) structure/device if code makes it to here
-            if data.StructureHPList[hitSaveName] ~= nil then
-               -- known material
-               local nodeIdA = GetRayHitLinkNodeIdA()
-               local nodeIdB = GetRayHitLinkNodeIdB()
- 
-               --Log("weaponType: " .. weaponType .. ", isInShieldExclusions: " .. tostring(data.ShieldExclusions[weaponType]) .. ", hitpoints: " .. hitpoints)
-                     
-               if (hitSaveName == "armour" or (hitSaveName == "door" and data.OpenDoors[nodeIdA .. " " .. nodeIdB] ~= true)) and data.MetalExclusions[weaponType] then return data.RAY_HIT_OBSTRUCTED, 0 end
-               if hitSaveName == "shield" and data.ShieldExclusions[weaponType] then return data.RAY_HIT_OBSTRUCTED, 0 end
-               
-               if (nodeIdA > 0 and nodeIdB > 0) then
-                  -- don't reduce HP if door is open
-                  if data.OpenDoors[nodeIdA .. " " .. nodeIdB] ~= true then
-                     -- GetLinkHealth is the percentage of HP left
-                     projectileHP = projectileHP - GetLinkHealth(nodeIdA, nodeIdB) * data.StructureHPList[hitSaveName]
-                     if ShowObstructionRays then SpawnCircle(hitPos, 50, Colour(0, 0, 255, 255), 5) end
+      else
+         teamHit = GetRayHitTeamId()
+         hitSaveName = GetRayHitMaterialSaveName()
+         if not (teamHit == teamId and GetRayHitDoor()) then -- ignore friendly doors
+            if hitSaveName ~= "backbracing" and hitSaveName ~= "rope" or (data.HitsBackground[weaponType] and teamHit%MAX_SIDES ~= teamId%MAX_SIDES) then -- ignore backbracing unless buzz or howie
+               if (teamHit%MAX_SIDES == teamId%MAX_SIDES) then return data.RAY_HIT_OBSTRUCTED, 0 end -- projectile path collides with friendly entity	
+               --LogLower("Ray hit " .. hitSaveName .. ", projectileHP: " .. projectileHP)		
+               -- ray hits (enemy or) structure/device if code makes it to here
+               if data.StructureHPList[hitSaveName] ~= nil then
+                  -- known material
+                  local nodeIdA = GetRayHitLinkNodeIdA()
+                  local nodeIdB = GetRayHitLinkNodeIdB()
+   
+                  --Log("weaponType: " .. weaponType .. ", isInShieldExclusions: " .. tostring(data.ShieldExclusions[weaponType]) .. ", hitpoints: " .. hitpoints)
+                        
+                  if (hitSaveName == "armour" or (hitSaveName == "door" and data.OpenDoors[nodeIdA .. " " .. nodeIdB] ~= true)) and data.MetalExclusions[weaponType] then return data.RAY_HIT_OBSTRUCTED, 0 end
+                  if hitSaveName == "shield" and data.ShieldExclusions[weaponType] then return data.RAY_HIT_OBSTRUCTED, 0 end
+                  
+                  if (nodeIdA > 0 and nodeIdB > 0) then
+                     -- don't reduce HP if door is open
+                     if data.OpenDoors[nodeIdA .. " " .. nodeIdB] ~= true then
+                        -- GetLinkHealth is the percentage of HP left
+                        projectileHP = projectileHP - GetLinkHealth(nodeIdA, nodeIdB) * data.StructureHPList[hitSaveName]
+                        if ShowObstructionRays then SpawnCircle(hitPos, 50, Colour(0, 0, 255, 255), 5) end
+                     end
+                  else 
+                     -- node ids not received for whatever reason
+                     projectileHP = projectileHP - data.StructureHPList[hitSaveName]
                   end
-               else 
-                  -- node ids not received for whatever reason
-                  projectileHP = projectileHP - data.StructureHPList[hitSaveName]
+      --					Log(" - " .. nodeIdA .. " " ..nodeIdB .. ", projectileHP: " .. projectileHP .. ", linkHealth " .. GetLinkHealth(nodeIdA, nodeIdB))
+               else
+                  -- unknown material, likely modded (or shield)
                end
-   --					Log(" - " .. nodeIdA .. " " ..nodeIdB .. ", projectileHP: " .. projectileHP .. ", linkHealth " .. GetLinkHealth(nodeIdA, nodeIdB))
-            else
-               -- unknown material, likely modded (or shield)
             end
          end
       end
