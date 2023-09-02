@@ -610,7 +610,10 @@ function LogTables(Table,IndentLevel)
      --local available = IsDeviceAvailable(id)
      if not spotterInUse and not missileLaunching --[[and available ]]then
          local fireTime = GetWeaponFiringTimeRemaining(id)
-         if fireTime < 0.05 then
+         if fireTime < 0 then
+            -- bug with lasers having negative firing time for some reason
+            ScheduleCall(0.5, TryCloseWeaponDoors, id)
+         elseif fireTime < 0.05 then
              CloseWeaponDoors(id)
          else
              ScheduleCall(fireTime, TryCloseWeaponDoors, id)
