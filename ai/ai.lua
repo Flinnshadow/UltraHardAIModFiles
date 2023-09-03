@@ -380,43 +380,6 @@ function LogTables(Table,IndentLevel)
      -- delete deformed nodes progressively
      --ProcessDeformedNodes(deformedNodes)                                                                                      --//Causes softlocks, in particular, dynamic nodes
  
-     -- only shoot while construction is paused or the difficulty level is extreme
-     if --[[offensivePhase and]] not data.Disable and not data.DisableOffence then
-         data.offenceBucket = data.offenceBucket - 1
-         local weaponCount = GetWeaponCount(teamId)
-         local attemptCount = 0
-         if weaponCount > 0 then
-             local done = false
-             local firstIndex = data.currWeapon
-             repeat
-                 if data.currWeapon < weaponCount then
-                --UpdateWeapon(data.currWeapon, not data.activeBuilding)                                                       --//Note, Removed all delay on weapon fireing, not ideal but prob not bad eithter, will cause more lag
-                     if data.offencePoints >= 1 and UpdateWeapon(data.currWeapon--[[, not data.activeBuilding]]) then
-                         data.offencePoints = data.offencePoints - 1
-                         done = true
-                     end
-                     
-                     data.currWeapon = data.currWeapon + 1
-                     if data.currWeapon == weaponCount then
-                         data.currWeapon = 0
-                     end
-                 else
-                     data.currWeapon = 0
-                 end
-                 attemptCount = attemptCount + 1
-                 if data.currWeapon == firstIndex or attemptCount >= weaponCount then
-                     done = true -- prevent continuous cycle on unready weapons
-                 end
-             until done
-         end
-         if data.offenceBucket < 0 then
-             data.offenceBucket = 0
-         elseif data.offenceBucket > 6 then
-             data.offenceBucket = 6
-         end
-         --LogEnum("Offence bucket = " .. data.offenceBucket)                                                                    //IMPORTANT, unless luac is smart, each LogEnum call is just wasted time, remove them if you can.
-     end
- 
      data.activeBuilding = false
  
      -- Attempt to rebuild parts of the fort that have been lost
@@ -524,6 +487,49 @@ function LogTables(Table,IndentLevel)
      end
      ScheduleCall(data.UpdatePeriod, UpdateAI)
  end
+
+ function UpdateWeapons()
+   if data.gameEnded or data.defeated then return end
+
+   -- only shoot while construction is paused or the difficulty level is extreme
+   if --[[offensivePhase and]] not data.Disable and not data.DisableOffence then
+      data.offenceBucket = data.offenceBucket - 1
+      local weaponCount = GetWeaponCount(teamId)
+      local attemptCount = 0
+      if weaponCount > 0 then
+            local done = false
+            local firstIndex = data.currWeapon
+            repeat
+               if data.currWeapon < weaponCount then
+               --UpdateWeapon(data.currWeapon, not data.activeBuilding)                                                       --//Note, Removed all delay on weapon fireing, not ideal but prob not bad eithter, will cause more lag
+                  if data.offencePoints >= 1 and UpdateWeapon(data.currWeapon--[[, not data.activeBuilding]]) then
+                        data.offencePoints = data.offencePoints - 1
+                        done = true
+                  end
+                  
+                  data.currWeapon = data.currWeapon + 1
+                  if data.currWeapon == weaponCount then
+                        data.currWeapon = 0
+                  end
+               else
+                  data.currWeapon = 0
+               end
+               attemptCount = attemptCount + 1
+               if data.currWeapon == firstIndex or attemptCount >= weaponCount then
+                  done = true -- prevent continuous cycle on unready weapons
+               end
+            until done
+      end
+      if data.offenceBucket < 0 then
+            data.offenceBucket = 0
+      elseif data.offenceBucket > 6 then
+            data.offenceBucket = 6
+      end
+      --LogEnum("Offence bucket = " .. data.offenceBucket)                                                                    //IMPORTANT, unless luac is smart, each LogEnum call is just wasted time, remove them if you can.
+   end
+
+   ScheduleCall(data.UpdatePeriod, UpdateWeapons)
+end
  
  function UpdateWeapon(index)
      local id = GetWeaponId(teamId, index)
@@ -1238,10 +1244,11 @@ function LogTables(Table,IndentLevel)
    offset = offset + 2.3*fortId/4
  
    ScheduleCall(2 + offset, UpdateAI)
+   ScheduleCall(2.5 + offset, UpdateWeapons)
    ScheduleCall(1.5 + offset, TryShootDownProjectiles)
    if not data.HumanAssist then
       ScheduleCall(7 + offset, Repair)
-      ScheduleCall(30 + offset, DecayFrustration)
+      if not data.DisableFrustration then ScheduleCall(30 + offset, DecayFrustration) end
    end
    
    GetAttackHintsFromProps(teamId%MAX_SIDES)
