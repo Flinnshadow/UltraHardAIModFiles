@@ -2838,12 +2838,21 @@ end
          
          if id <= 0 then
             --LogDetail("creating device " .. action.DeviceSaveName .. " AN" .. actualNodeA .. "-AN" .. actualNodeB .. " t" .. action.LinkT)
-            local result = CreateDevice(teamId, UpgradeSource[action.DeviceSaveName] or action.DeviceSaveName, actualNodeA, actualNodeB, action.LinkT)
+            -- local result = CreateDevice(teamId, UpgradeSource[action.DeviceSaveName] or action.DeviceSaveName, actualNodeA, actualNodeB, action.LinkT)
+            
+				local upgradeSource = GetNextUpgradeStep(nil, action.DeviceSaveName)
+
+            facingFlag = 0
+            if (action.Facing) then
+               facingFlag = (action.Facing == FACING_LEFT) and CREATEDEVICEFLAG_PANANGLELEFT or CREATEDEVICEFLAG_PANANGLERIGHT
+            end
+            result = CreateDeviceWithFlags(teamId, upgradeSource or action.DeviceSaveName, actualNodeA, actualNodeB, action.LinkT, facingFlag, -1)
+
             data.ResourceStarved = (result == CD_INSUFFICIENTRESOURCES)
             if result >= 0 then
                -- The result passed back is the new device's id. Remember it so if the device is destroyed we can rebuild it using this action
                data.Devices[result] = index
-               if UpgradeSource[action.DeviceSaveName] then
+               if upgradeSource then
                   LogDetail(" - building upgrade precursor...")
                   return false -- need to come back to this action to build the upgraded device
                end
@@ -2888,15 +2897,6 @@ end
                --LogError("Upgraded device location occupied by incompatible device")
                return true
             end		
-         elseif result == CD_PREREQUISITENOTMET and UpgradeSource[action.DeviceSaveName] then
-            LogDetail("Building device prerequisite " .. UpgradeSource[action.DeviceSaveName])
-            -- build the pre-requisite first and try to upgrade later
-            local result = CreateDevice(teamId, UpgradeSource[action.DeviceSaveName], actualNodeA, actualNodeB, action.LinkT)
-            data.ResourceStarved = (result == CD_INSUFFICIENTRESOURCES)
-            if result < 0 then
-               --LogError(CD[result])
-            end
-            return result >= 0
          else
             --LogError("Obstructed by " .. GetDeviceType(id) .. ", giving up")
             return true
