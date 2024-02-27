@@ -1832,6 +1832,7 @@ end
       data.FailedAttempts[weaponId] = math.max((data.FailedAttempts[weaponId] or 0) - 0.3, 0)
     else return nil end
     local target = bestTarget[GetRandomInteger(1, #bestTarget, "FindPriorityTarget " .. bestTarget[1].x)]
+    if ShowObstructionRays then SpawnCircle(target, 50, Green(255), 2) end
     return target
  
    --TargetRandom = RandomFloat%0.000001*1000000+0.01
@@ -1882,7 +1883,7 @@ end
    local aimDirection = hardPointPos + firingDirection
    --SpawnLine(hardPointPos, aimDirection, Blue(255), 5)
  
-   -- check if next 5 tiles inn that direction are free
+   -- check if next 30 tiles in that direction are clear
    if ShowObstructionRays then rayFlags = rayFlags | RAY_DEBUG end
    local hitType = CastTargetObstructionRayNew(hardPointPos, aimDirection, math.huge, rayFlags, weaponType, targetId, weaponId)
    
@@ -1892,72 +1893,34 @@ end
    end
    -- else, can actually fire there
  
-   -- variable "pos" is the position of the chosen target
-   --if WeaponFiresLobbedProjectile[weaponType] then
-      -- Log("Lobbed")
-      -- cast a ray back from the target to avoid terrain
-   
-      if AimWeapon(weaponId, pos) then
-         local hardPointPos = GetWeaponHardpointPosition(weaponId)
-         local v = GetAimWeaponSpeed()  -- Initial velocity of the projectile
-         local angle = delta
-         local vx = v * math.cos(angle)
-         local vy = v * math.sin(angle)
-         local dx = pos.x - hardPointPos.x
-         local dy = hardPointPos.y - pos.y
-         local g = data.Gravity[weaponType] or 981
+   -- Note: variable "pos" is the position of the chosen target
 
-         local time = dx / vx
-         local vy2 = vy - time * g
+   -- do hitpoint check near target position
+   local v = GetAimWeaponSpeed()  -- Initial velocity of the projectile
+   local angle = delta
+   local vx = v * math.cos(angle)
+   local vy = v * math.sin(angle)
+   local dx = pos.x - hardPointPos.x
+   local dy = hardPointPos.y - pos.y
+   local g = data.Gravity[weaponType] or 981
 
-         local fac = 1000/math.sqrt(vx^2 + vy2^2)
- 
-         local testPos = Vec3()
-         testPos.x = pos.x - fac * vx
-         testPos.y = pos.y + fac * vy2
-         if ShowObstructionRays then SpawnLine(pos, testPos, Colour(0, 255, 0, 255), 5) end
-         if CastGroundRay(pos, testPos, TERRAIN_PROJECTILE) == RAY_HIT_TERRAIN then
-            LogLower("(Lobbed Projectile) ground ray hit terrain")
-            return true, false
-         end
-             -- has line of sight
-             -- shoot ray from artificial pos to target pos to check if projectile has enough hp/splash
-             local hitType, dmgDealt = CastTargetObstructionRayNew(testPos, pos, hitpoints, rayFlags, weaponType, targetId, weaponId,damageMulti)
- 
-             if hitType == data.RAY_HIT_OBSTRUCTED then return true, false end
- 
-             return false, dmgDealt
-      else
-         LogLower("No firing solution")
-         return true, false
-      end
-   --end
- 
-   --[[if not needLineOfSight and not needLineToStructure then
-      if ShowObstructionRays then SpawnCircle(hardPointPos, 150, Colour(255,255,255,255), 5) end
-      return false, false
-   else
-      
-      if ShowObstructionRays then rayFlags = rayFlags | RAY_DEBUG end
- 
- --		local hitType = CastRayFromDevice(weaponId, pos, hitpoints, rayFlags, 0)
- --		Log("Casting ray from " .. weaponType .. ", teamId: " .. teamId .. " to " .. GetDeviceType(GetDeviceIdAtPosition(pos)) .. ", pos: " .. pos)
- 
-      hitType, dmgDealt = CastTargetObstructionRayNew(hardPointPos, pos, hitpoints, rayFlags, weaponType, targetId, weaponId,damageMulti)
- 
-      if hitType == data.RAY_HIT_OBSTRUCTED then return true, false end -- target obstructed/cannot be reached (projectileHP < 0)
- 
-      if needLineOfSight then
-         if (hitType == RAY_HIT_WEAPON or hitType == RAY_HIT_DEVICE) and GetRayHitSideId()%MAX_SIDES == enemyTeamId and CastGroundRayFromWeapon(weaponId, pos, TERRAIN_PROJECTILE) == 0  then
-            return false, dmgDealt
-         end
-      else
-         if hitType ~= RAY_HIT_TERRAIN and GetRayHitTeamId()%MAX_SIDES == enemyTeamId then
-            return false, dmgDealt
-         end
-      end
-   end]]--
-   return true, false
+   local time = dx / vx
+   local vy2 = vy - time * g
+
+   -- length of obstruction ray is equal to distance projectile travels in half a second
+   -- or equal to 75% of entire distance traveled, whichever is smaller
+   local fac = math.min(1, 0.75*time)
+
+   local testPos = Vec3()
+   testPos.x = pos.x - fac * vx
+   testPos.y = pos.y + fac * vy2
+   --if ShowObstructionRays then SpawnLine(pos, testPos, Colour(0, 255, 0, 255), 5) end
+   -- has line of sight
+   -- shoot ray from artificial pos to target pos to check if projectile has enough hp/splash
+   local hitType, dmgDealt = CastTargetObstructionRayNew(testPos, pos, hitpoints, rayFlags, weaponType, targetId, weaponId,damageMulti)
+   if hitType == data.RAY_HIT_OBSTRUCTED or hitType == RAY_HIT_TERRAIN then return true, false end
+
+   return false, dmgDealt
  end
  
  function comparePositions(pos1, pos2)
