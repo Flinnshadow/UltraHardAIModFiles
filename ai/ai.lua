@@ -148,10 +148,10 @@ function LogTables(Table,IndentLevel)
  data.ProjectileHitpoints["firebeam"] = 0
  data.ProjectileHitpoints["buzzsaw"] = 40*19
  data.ProjectileHitpoints["shotgun"] = 160
- data.ProjectileHitpoints["sniper2"] = 650
- data.ProjectileHitpoints["sniper"] = 100 -- gradually increases with failed attempts
- data.ProjectileHitpoints["mortar"] = 160
- data.ProjectileHitpoints["mortar2"] = 160
+ data.ProjectileHitpoints["sniper2"] = 30 -- +600 added after available weapon multiplier
+ data.ProjectileHitpoints["sniper"] = 15 -- gradually increases with failed attempts
+ data.ProjectileHitpoints["mortar"] = 50
+ data.ProjectileHitpoints["mortar2"] = 150
 
  data.AntiAirInclude["cannon"] = { ["howitzer"] = true, }
  data.AntiAirInclude["mortar"] = { ["cannon"] = true, ["howitzer"] = true, }
@@ -2015,7 +2015,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
                      if data.OpenDoors[nodeIdA .. " " .. nodeIdB] ~= true then
                         -- GetLinkHealth is the percentage of HP left
                         projectileHP = projectileHP - GetLinkHealth(nodeIdA, nodeIdB) * data.StructureHPList[hitSaveName]
-                        if ShowObstructionRays then SpawnCircle(hitPos, 50, Colour(0, 0, 255, 255), 5) end
+                        if ShowObstructionRays then SpawnCircle(hitPos, 50, Colour(0, 0, 255, 255), 3) end
                      end
                   else 
                      -- node ids not received for whatever reason
@@ -2036,7 +2036,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
    if projectileHP < 0 then
       if data.ProjectileSplash[weaponType] then
          local distance = Vec3Length(target - GetRayHitPosition())
-         if ShowObstructionRays then SpawnCircle(GetRayHitPosition(), data.ProjectileSplash[weaponType], Red(92), 5) end
+         if ShowObstructionRays then SpawnCircle(GetRayHitPosition(), data.ProjectileSplash[weaponType], Red(92), 3) end
          local dmgDealt = 1 - distance / (data.ProjectileSplash[weaponType]*damageMulti.direct or data.ProjectileSplash[weaponType]*damageMulti.splash or data.ProjectileSplash[weaponType])
          if dmgDealt > 0 then return RAY_HIT_WEAPON, dmgDealt end
       end
@@ -3288,6 +3288,8 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"machinegun", 100, 140},
      {"flak", 100, -1},
      {"barrel", 100, 90},
+     {"mortar2", 91, -1},
+     {"mortar", 91, -1},
      {"mine2", 90, -1},
      {"turbine2", 85, -1},
      {"turbine", 80, -1},
@@ -3314,8 +3316,6 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"rocket", 50, -1},
      {"smokebomb", 50, -1},
      {"shotgun", 50, -1},
-     {"mortar2", 50, -1},
-     {"mortar", 50, -1},
      {"workshop", 29, -1},
      {"armoury", 29, -1},
      {"store", 29, -1},
