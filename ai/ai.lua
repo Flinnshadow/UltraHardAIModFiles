@@ -1160,7 +1160,7 @@ end
    end
  
    FindStartingEnemyDevices()
-   FindStartingTeamWeapon()
+   FindStartingTeamWeapons()
    local debugLevel = GetConstant("AI.DebugLevel")
    if debugLevel >= LOG_CONFIG and GetGameMode() ~= "Multiplayer" then
       UpdateLogLevel(debugLevel)
@@ -1270,19 +1270,13 @@ end
    end
  end
  
- function FindStartingTeamWeapon()
-   --local sideDevices = {}
+function FindStartingTeamWeapons()
    local deviceCount = GetDeviceCount(teamId)
    for index = 0,deviceCount - 1 do
       local id = GetDeviceId(teamId, index)
       local saveName = GetDeviceType(id)
-      --[[if sideDevices[saveName] == nil then
-         sideDevices[saveName] = {}
-      end]]
-      --table.insert(sideDevices[saveName], id)
       if IsWeapon(id) then
-         --Log("On team: "..enemyTeamId.." Adding: "..saveName.." "..id)
-         table.insert(data.TeamWeapons, {id = id, saveName = saveName, isAvailable = true})
+         table.insert(data.TeamWeapons[saveName], id)
       end
    end
  end
@@ -1293,39 +1287,48 @@ end
  
  for i=1,#AllTypesOfDevicesAndWeapons do
    data.DevicesOnEnemyTeam[AllTypesOfDevicesAndWeapons[i]] = {}
+   -- adding devices as well even though theyre never gonna be used
+   -- too lazy to make another table with only weapons xd
+   data.TeamWeapons[AllTypesOfDevicesAndWeapons[i]] = {}
  end
  
- function AddDeviceToEnemySide(id,saveName)
-   --Log("adtes")
-   --Log("AI team: "..teamId.."Enemy: "..enemyTeamId.." "..Id.." "..saveName)
-   --Log("Add, Enemy: "..enemyTeamId.." "..Id.." "..saveName)
-   table.insert(data.DevicesOnEnemyTeam[saveName],id)
- end
+function AddDeviceToEnemySide(id,saveName)
+  --Log("adtes")
+  --Log("AI team: "..teamId.."Enemy: "..enemyTeamId.." "..Id.." "..saveName)
+  --Log("Add, Enemy: "..enemyTeamId.." "..Id.." "..saveName)
+  table.insert(data.DevicesOnEnemyTeam[saveName],id)
+end
+
+function RemoveDeviceFromEnemySide(id,saveName)
+  --Log("rdtes")
+  --Log("AI team: "..teamId.."Enemy: "..enemyTeamId.." "..Id.." "..saveName)
+   --Log("Remove, Enemy: "..enemyTeamId.." "..id.." "..saveName)
+   for i=1,#data.DevicesOnEnemyTeam[saveName] do
+      if data.DevicesOnEnemyTeam[saveName][i] == id then
+           table.remove(data.DevicesOnEnemyTeam[saveName],i)
+           return
+       end
+   end
+end
  
- function RemoveDeviceFromEnemySide(id,saveName)
-   --Log("rdtes")
+function AddDeviceToTeamWeapons(id,saveName)
    --Log("AI team: "..teamId.."Enemy: "..enemyTeamId.." "..Id.." "..saveName)
-    --Log("Remove, Enemy: "..enemyTeamId.." "..id.." "..saveName)
-    for i=1,#data.DevicesOnEnemyTeam[saveName] do
-       if data.DevicesOnEnemyTeam[saveName][i] == id then
-            table.remove(data.DevicesOnEnemyTeam[saveName],i)
-            return
-        end
-    end
- end
- 
- function AddDeviceToTeamWeapons(Id,saveName)
-   --Log("AI team: "..teamId.."Enemy: "..enemyTeamId.." "..Id.." "..saveName)
-   if IsWeapon(Id) then
+   if IsWeapon(id) then
       --Log("Add, Enemy: "..enemyTeamId.." "..Id.." "..saveName)
-      data.TeamWeapons[Id] = Id
+      table.insert(data.TeamWeapons[saveName],id)
    end
  end
  
- --[[function RemoveDeviceFromTeamWeapons(Id,saveName)
-   --Log("AI team: "..teamId.."Enemy: "..enemyTeamId.." "..Id.." "..saveName)
-   --Log("Remove, Enemy: "..enemyTeamId.." "..Id.." "..saveName)
- end]]
+ function RemoveDeviceFromTeamWeapons(id,saveName)
+    if IsWeapon(id) then
+       for i=1, #data.TeamWeapons[saveName] do
+          if data.TeamWeapons[saveName][i] == id then
+             table.remove(data.TeamWeapons[saveName], i)
+             return
+          end
+       end
+    end
+ end
  
  
  function OnDeviceTeamUpdated(oldTeamId, newTeamId, deviceId, saveName) -- This is run before game start due to structures not actually owning/parenting ground devices, use GameStarted to ignore these calls
@@ -1336,20 +1339,22 @@ end
       AddDeviceToEnemySide(deviceId,saveName)
    elseif oldTeamId%100 == enemyTeamId then
       RemoveDeviceFromEnemySide(deviceId,saveName)
-   end
-   --[[if newTeamId == teamId then
-      AddDeviceToTeamWeapons(deviceId,saveName)
+   elseif newTeamId == teamId then
+      if IsDeviceFullyBuilt(deviceId) then
+       AddDeviceToTeamWeapons(deviceId,saveName)
+      end
    elseif oldTeamId == teamId then
-      RemoveDeviceFromTeamWeapons(deviceId,saveName)
-   end]]
+       if IsDeviceFullyBuilt(deviceId) then
+          RemoveDeviceFromTeamWeapons(deviceId,saveName)
+       end
+   end
  end
  
- --[[function OnDeviceCompleted(ODCteamId, deviceId, saveName)
-   Log(""..saveName)
+function OnDeviceCompleted(ODCteamId, deviceId, saveName)
    if ODCteamId == teamId then
-      AddDeviceToTeamWeapons(ODCteamId,saveName)
+      AddDeviceToTeamWeapons(deviceId,saveName)
    end
- end]]
+ end
  
  function OnDeviceCreated(deviceTeamId, deviceId, saveName, nodeA, nodeB, t, upgradedId)
    --Log("d"..deviceId)
@@ -1358,6 +1363,11 @@ end
          RemoveDeviceFromEnemySide(upgradedId, data.UpgradeOf[saveName])
       end
       AddDeviceToEnemySide(deviceId, saveName)
+   elseif deviceTeamId == teamId then
+      if upgradedId > 0 then
+         RemoveDeviceFromTeamWeapons(upgradedId, data.UpgradeOf[saveName])
+      end
+      -- will be added through OnDeviceCompleted
    end
    if data.gameEnded or data.HumanAssist then return end
  
@@ -1366,13 +1376,17 @@ end
    end
  end
  
- function OnGroundDeviceCreated(teamId, deviceId, saveName, pos, upgradedId)
-   --Log("gd"..deviceId)
-   if teamId%100 == enemyTeamId then
+ function OnGroundDeviceCreated(deviceTeamId, deviceId, saveName, pos, upgradedId)
+   if deviceTeamId%100 == enemyTeamId then
       if upgradedId > 0 then
          RemoveDeviceFromEnemySide(upgradedId, data.UpgradeOf[saveName])
       end
       AddDeviceToEnemySide(deviceId,saveName)
+   elseif deviceTeamId == teamId then
+      if upgradedId > 0 then
+         RemoveDeviceFromTeamWeapons(upgradedId, data.UpgradeOf[saveName])
+      end
+      -- will be added through OnDeviceCompleted
    end
  end
  
@@ -1381,10 +1395,9 @@ end
    --Log("deleted"..deviceId..saveName)
    if deviceTeamId%100 == enemyTeamId then
       RemoveDeviceFromEnemySide(deviceId,saveName)
+   elseif deviceTeamId == teamId then
+      RemoveDeviceFromTeamWeapons(deviceId, saveName)
    end
-   --[[if deviceTeamId == teamId then
-      RemoveDeviceFromTeamWeapons(deviceTeamId,saveName)
-   end]]
    if OnDeviceDestroyed and data.DeviceDeleteToRebuild[deviceId] then
       OnDeviceDestroyed(deviceTeamId, deviceId, saveName, nodeA, nodeB, t,true)
    end
@@ -1396,10 +1409,9 @@ end
       --BetterLog(data.DevicesOnEnemyTeam)
       if deviceTeamId%100 == enemyTeamId then
          RemoveDeviceFromEnemySide(deviceId,saveName)
+      elseif deviceTeamId == teamId then
+         RemoveDeviceFromTeamWeapons(deviceId, saveName)
       end
-      --[[if deviceTeamId == teamId then
-         RemoveDeviceFromTeamWeapons(deviceTeamId,saveName)
-      end]]
    end
    CheckDeviceForRebuild(deviceId, saveName, nodeA, nodeB)
    data.ActionQueue[deviceId] = nil
@@ -1589,7 +1601,12 @@ end
    local bestTarget = {}
    --Log("FailedAttempts: " .. (data.FailedAttempts[weaponId] or 0))
    local balls = (data.FailedAttempts[weaponId] or 0)
-   local hitpoints = data.ProjectileHitpoints[type] * 1.05 ^ balls * (0.07*balls + 1)
+   local hitpoints = data.ProjectileHitpoints[type] * #data.TeamWeapons[type]
+   hitpoints = hitpoints * 1.05 ^ balls * (0.07*balls + 1)
+   if type == "sniper2" then
+    -- to account for penetration
+    hitpoints = hitpoints + 600
+   end
    local apple = GetRandomFloat(0,1,"WeaponFireTypeProbabilities"..weaponId)
     local apple2 = GetDeviceType(weaponId)
     local rolledForTarget = false
