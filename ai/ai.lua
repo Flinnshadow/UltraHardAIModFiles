@@ -1882,7 +1882,8 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
       --Log("  No firing solution")
       return true, false
    end
-   
+   -- pre-aiming weapon so that hardpoint changes and we know exactly where the projectile would spawn
+   FireWeapon(weaponId, pos, 0, FIREFLAG_TEST)
    local hardPointPos = GetWeaponHardpointPosition(weaponId)
    --SpawnCircle(hardPointPos, 100, Red(255), 5)
  
