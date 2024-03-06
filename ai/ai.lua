@@ -1360,12 +1360,12 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
    --Log("d"..deviceId)
    if deviceTeamId%100 == enemyTeamId then
       if upgradedId > 0 then
-         RemoveDeviceFromEnemySide(upgradedId, data.UpgradeOf[saveName])
+         RemoveDeviceFromEnemySide(upgradedId, GetNextUpgradeStep(nil, saveName))
       end
       AddDeviceToEnemySide(deviceId, saveName)
    elseif deviceTeamId == teamId then
       if upgradedId > 0 then
-         RemoveDeviceFromTeamWeapons(upgradedId, data.UpgradeOf[saveName])
+         RemoveDeviceFromTeamWeapons(upgradedId, GetNextUpgradeStep(nil, saveName))
       end
       -- will be added through OnDeviceCompleted
    end
@@ -1379,12 +1379,12 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
  function OnGroundDeviceCreated(deviceTeamId, deviceId, saveName, pos, upgradedId)
    if deviceTeamId%100 == enemyTeamId then
       if upgradedId > 0 then
-         RemoveDeviceFromEnemySide(upgradedId, data.UpgradeOf[saveName])
+         RemoveDeviceFromEnemySide(upgradedId, GetNextUpgradeStep(nil, saveName))
       end
       AddDeviceToEnemySide(deviceId,saveName)
    elseif deviceTeamId == teamId then
       if upgradedId > 0 then
-         RemoveDeviceFromTeamWeapons(upgradedId, data.UpgradeOf[saveName])
+         RemoveDeviceFromTeamWeapons(upgradedId, GetNextUpgradeStep(nil, saveName))
       end
       -- will be added through OnDeviceCompleted
    end
@@ -1601,7 +1601,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
    local bestTarget = {}
    --Log("FailedAttempts: " .. (data.FailedAttempts[weaponId] or 0))
    local balls = (data.FailedAttempts[weaponId] or 0)
-   local hitpoints = data.ProjectileHitpoints[type] * #data.TeamWeapons[type]
+   local hitpoints = (data.ProjectileHitpoints[type] or 0) * (#data.TeamWeapons[type] or 0)
    hitpoints = hitpoints * 1.05 ^ balls * (0.07*balls + 1)
    if type == "sniper2" then
     -- to account for penetration
@@ -2819,15 +2819,15 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
          
          if id <= 0 then
             --LogDetail("creating device " .. action.DeviceSaveName .. " AN" .. actualNodeA .. "-AN" .. actualNodeB .. " t" .. action.LinkT)
-            -- local result = CreateDevice(teamId, UpgradeSource[action.DeviceSaveName] or action.DeviceSaveName, actualNodeA, actualNodeB, action.LinkT)
+            local result = CreateDevice(teamId, UpgradeSource[action.DeviceSaveName] or action.DeviceSaveName, actualNodeA, actualNodeB, action.LinkT)
             
 				local upgradeSource = GetNextUpgradeStep(nil, action.DeviceSaveName)
 
-            facingFlag = 0
+            --[[facingFlag = 0
             if (action.Facing) then
                facingFlag = (action.Facing == FACING_LEFT) and CREATEDEVICEFLAG_PANANGLELEFT or CREATEDEVICEFLAG_PANANGLERIGHT
             end
-            result = CreateDeviceWithFlags(teamId, upgradeSource or action.DeviceSaveName, actualNodeA, actualNodeB, action.LinkT, facingFlag, -1)
+            result = CreateDeviceWithFlags(teamId, upgradeSource or action.DeviceSaveName, actualNodeA, actualNodeB, action.LinkT, facingFlag, -1)]]--
 
             data.ResourceStarved = (result == CD_INSUFFICIENTRESOURCES)
             if result >= 0 then
