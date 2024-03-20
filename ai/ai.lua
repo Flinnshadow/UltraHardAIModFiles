@@ -152,6 +152,7 @@ function LogTables(Table,IndentLevel)
  data.ProjectileHitpoints["sniper"] = 15 -- gradually increases with failed attempts
  data.ProjectileHitpoints["mortar"] = 50
  data.ProjectileHitpoints["mortar2"] = 150
+ data.ProjectileHitpoints["howitzer"] = 400 -- apparently it's set to 1000 default which doesn't make sense, 400 is the correct amount
 
  data.AntiAirInclude["cannon"] = { ["howitzer"] = true, }
  data.AntiAirInclude["mortar"] = { ["cannon"] = true, ["howitzer"] = true, }
@@ -1594,7 +1595,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      local firesIndirect = WeaponFiresIndirect[type]
     needLineOfSight, needLineToStructure = not firesIndirect, not firesIndirect
     
-   if not priorities[type] then Log("Weapon \"" .. type .. "\" has no target priority list. Aborting fire.") return end
+   if not priorities[type] then --[[Log("Weapon \"" .. type .. "\" has no target priority list. Aborting fire.")]] return end
    --LogLower("Finding target for " .. type .. "with id " .. weaponId)
  
    local MaxPriority = 0
