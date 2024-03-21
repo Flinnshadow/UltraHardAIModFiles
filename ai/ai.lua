@@ -131,7 +131,7 @@ function LogTables(Table,IndentLevel)
  data.DoorCloseDelayMax = 0.05
  --data.DoorCloseDelayMax = 6
  data.NoTargetCloseDoorDelay = 0.1
- data.GroupDoorOpenDelay = 0
+ data.GroupDoorOpenDelay = 0.1
  data.MissileDoorFireDelay = 0.1
  data.RepairPeriod = 0.2
  --data.ReplaceDeviceDelayMin = 0
@@ -152,15 +152,22 @@ function LogTables(Table,IndentLevel)
  data.ProjectileHitpoints["sniper"] = 15 -- gradually increases with failed attempts
  data.ProjectileHitpoints["mortar"] = 50
  data.ProjectileHitpoints["mortar2"] = 150
- data.ProjectileHitpoints["howitzer"] = 400 -- apparently it's set to 1000 default which doesn't make sense, 400 is the correct amount
+ data.ProjectileHitpoints["howitzer"] = 450 -- apparently it's set to 1000 default which doesn't make sense, 450 correct direct dmg but less so that it doesnt penetrate metal
+ data.ProjectileHitpoints["minigun"] = 100  -- actual damage is 227.5 if all shots land
+ data.ProjectileHitpoints["minigun2"] = 30  -- +600 added after available weapon multiplier
 
  data.AntiAirInclude["cannon"] = { ["howitzer"] = true, }
+ data.AntiAirInclude["cannon20mm"] = { ["howitzer"] = true, }
  data.AntiAirInclude["mortar"] = { ["cannon"] = true, ["howitzer"] = true, }
  data.AntiAirInclude["mortar2"] = { ["cannon"] = true, ["howitzer"] = true, }
  data.AntiAirInclude["rocket"] = { ["balls"] = false, } -- to make them shoot at nothing
  data.AntiAirInclude["rocketemp"] = { ["balls"] = false, } -- to make them shoot at nothing
  data.AntiAirInclude["howitzer"] = { ["balls"] = false, } -- to make them shoot at nothing
  data.AntiAirInclude["buzzsaw"] = { ["howitzer"] = true, ["missile2"] = true, }
+ data.AntiAirInclude["laser"] = { ["balls"] = false, }     -- to make them shoot at nothing
+ data.AntiAirInclude["firebeam"] = { ["balls"] = false, }  -- to make them shoot at nothing
+ data.AntiAirInclude["magnabeam"] = { ["balls"] = false, } -- to make them shoot at nothing
+ data.AntiAirInclude["minigun2"] = { ["balls"] = false, }  -- to make them shoot at nothing
  --data.AntiAirExclude["mortar"] = { ["mortar"] = true, ["mortar2"] = true, ["missile"] = true, }
  --data.AntiAirExclude["mortar2"] = { ["mortar"] = true, ["mortar2"] = true, ["missile"] = true, }
  
@@ -308,23 +315,12 @@ function LogTables(Table,IndentLevel)
    ["rocketemp"] = 0,
  }
 
- data.UpgradeOf =
- {
-   ["minigun"] = "machinegun",
-   ["mortar2"] = "mortar",
-   ["rocket"] = "rocketemp",
-   ["turbine2"] = "turbine",
-   ["mine2"] = "mine",
-   ["sniper2"] = "sniper",
-   ["shotgun"] = "flak",
-   ["missile2"] = "missile",
-   ["missile2inv"] = "missileinv",
- }
- 
  data.OffensiveFireProbability["sniper"] = 1
  data.OffensiveFireProbability["machinegun"] = 0
  
  data.FailedAttempts = {}
+
+ data.WeaponsInUse = {}
  
  for k, v in pairs(FireErrorStdDev) do
    FireErrorStdDev[k] = 0
@@ -494,7 +490,7 @@ function LogTables(Table,IndentLevel)
 
    -- only shoot while construction is paused or the difficulty level is extreme
    if --[[offensivePhase and]] not data.Disable and not data.DisableOffence then
-      data.offenceBucket = data.offenceBucket - 1
+      --data.offenceBucket = data.offenceBucket - 1
       local weaponCount = GetWeaponCount(teamId)
       local attemptCount = 0
       if weaponCount > 0 then
@@ -503,8 +499,8 @@ function LogTables(Table,IndentLevel)
             repeat
                if data.currWeapon < weaponCount then
                --UpdateWeapon(data.currWeapon, not data.activeBuilding)                                                       --//Note, Removed all delay on weapon fireing, not ideal but prob not bad eithter, will cause more lag
-                  if data.offencePoints >= 1 and UpdateWeapon(data.currWeapon--[[, not data.activeBuilding]]) then
-                        data.offencePoints = data.offencePoints - 1
+                  if --[[data.offencePoints >= 1 and]] UpdateWeapon(data.currWeapon--[[, not data.activeBuilding]]) then
+                        --data.offencePoints = data.offencePoints - 1
                         done = true
                   end
                   
@@ -521,11 +517,11 @@ function LogTables(Table,IndentLevel)
                end
             until done
       end
-      if data.offenceBucket < 0 then
+      --[[if data.offenceBucket < 0 then
             data.offenceBucket = 0
       elseif data.offenceBucket > 6 then
             data.offenceBucket = 6
-      end
+      end]]
       --LogEnum("Offence bucket = " .. data.offenceBucket)                                                                    //IMPORTANT, unless luac is smart, each LogEnum call is just wasted time, remove them if you can.
    end
 
@@ -540,10 +536,7 @@ end
              return false
          end]]
  
-         if TableLength(data.ActionQueue) > 0 and data.ActionQueue[id] == nil then
-          --Log("return F")
-             return false
-         end
+         if data.WeaponsInUse[id] then return false end
          
          if data.ResourceStarved then
              -- some weapons take too many resources from reconstruction efforts
@@ -1077,6 +1070,7 @@ end
  {
    ["machinegun"] = Value(0,30),
    ["minigun"] = Value(20,300),
+   ["minigun2"] = Value(30, 500),
    ["sniper"] = Value(0,30),
    ["sniper2"] = Value(3,200),
    ["mortar"] = Value(3,150),
@@ -1101,6 +1095,7 @@ end
  AllTypesOfDevicesAndWeapons = {
    "machinegun",
    "minigun",
+   "minigun2",
    "sniper",
    "sniper2",
    "mortar",
@@ -1418,31 +1413,6 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
    data.ActionQueue[deviceId] = nil
  end
  
- WeaponRetargetsWhileOpeningDoorsChance =
- {
-   ["machinegun"]=	0.3,
-   ["minigun"] =	0.7,
-   ["sniper"] =	0.95,
-   ["sniper2"] =	0.2,
-   ["mortar"] =	0.3,
-   ["mortar2"] = 	0.3,
-   ["buzzsaw"] =	0.4,
-   ["missile"] =	0.3,
-   ["missile2"] = 	0.3,
-   ["missileinv"]=	0.3,
-   ["missile2inv"]=0.3,
-   ["smokebomb"] = 0.2,
-   ["flak"] = 		1, -- this should never be used...
-   ["shotgun"] = 	0.7,
-   ["rocketemp"] = 0.5,
-   ["rocket"] = 	0.5,
-   ["cannon20mm"]=	0.7,
-   ["cannon"] = 	0.8,
-   ["howitzer"] = 	0.8,
-   ["firebeam"] = 	1,
-   ["magnabeam"] = 1,
-   ["laser"] = 	0.7,
- }
  --[[
  function FireAllAvailableWeaponsLoop()
    for key, WeaponTable in pairs(data.TeamWeapons) do
@@ -2152,11 +2122,13 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
  function TryFireGun(id,useGroup,index, target, balls)
     --if balls then Log("" .. (target or "NO TARGET AHHH")) end
      if data.gameEnded then
+      data.WeaponsInUse[id] = nil
          return
      end
  
      if not DeviceExists(id) then
          --LogDetail("TryFireGun device no longer exists")
+      data.WeaponsInUse[id] = nil
          return
      end
  
@@ -2164,11 +2136,6 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
  
      --LogFunction("TryFireGun " .. type .. " Id " .. id)
  
-     if data.ActionQueue[id] then
-         Log("Processing action queue")
-         return _G[data.ActionQueue[id].ProcessFunction](data.ActionQueue[id])
-     end
-     
      local group = useGroup
      if group then
          --LogDetail("  Attempting repeated fire of group, validating. leader " .. type)
@@ -2200,22 +2167,26 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      --Log("TryFireGun " .. type .. ": probability " .. tostring(probability))
  
      -- don't use defensive weapons for offence
-     if not useGroup and probability and GetRandomFloat(0, 1, "TryFireGun 1 " .. id) > probability then
-         --Log("Aborting fire due to random chance")
-         return
-     end
+    if not useGroup and probability == 0 then
+      --Log("TryFireGun this weapon isn't meant to be used offensively, aborting fire.")
+      data.WeaponsInUse[id] = nil
+      return
+   end
  
      -- don't try to use weapons painting a target for other weapons
      -- or it's being used by a human player or reloading
      if IsSpotter(type, teamId) and (IsWeaponSpotting(id) or data.SpotterInUse[id]) then
          --LogDetail("Weapon not available (spotting)")
+         data.WeaponsInUse[id] = nil
          return
      elseif --[[not IsAIDeviceAvailable(id) or]] data.MissileLaunching[id] then
          --LogDetail("Weapon not available (in use)")
+         data.WeaponsInUse[id] = nil
          return
      elseif not IsWeaponReadyToFire(id) then
          TryCloseWeaponGroupDoors(group)
          --LogDetail("Weapon not available (reloading)")
+         data.WeaponsInUse[id] = nil
          return
      end
      
@@ -2223,9 +2194,12 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      if not CanAfford(teamResources - WeaponFireCosts[type]) then
          --LogDetail("can't afford to fire weapon: resources = " .. teamResources .. ", cost = " .. GetWeaponFireCost(id))
          TryCloseWeaponGroupDoors(group)
+         data.WeaponsInUse[id] = nil
          return
      end
  
+     data.WeaponsInUse[id] = true
+
      if not useGroup then
          group = SelectWeaponGroup(id)
      end
@@ -2238,6 +2212,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
          if not data.SpotterInUse[id] and not data.MissileLaunching[id] then
             ScheduleCall(data.NoTargetCloseDoorDelay, TryCloseWeaponGroupDoors, group)
          end
+         data.WeaponsInUse[id] = nil
          return
      end
     groupsize = #group
@@ -2271,7 +2246,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
              local gid = group[k]
              type = GetDeviceType(gid)
              if not RequiresSpotter(type, teamId) then
-                 data.offenceBucket = data.offenceBucket + 2
+                 --data.offenceBucket = data.offenceBucket + 2
                  --LogDetail("Attempting to fire group weapon " .. gid .. " of type " .. type)
                  --Log("FIRING WEAPON AT AT " .. currentTarget)
                  local result = FireWeapon(gid, currentTarget, 0, FIREFLAG_FORCEDOORSOPEN | FIREFLAG_EXTRACLEARANCE)
@@ -2282,10 +2257,8 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
                      -- close door in a little delay
                      --Log("Fire success, closing doors")
                      TryCloseWeaponDoorsWithDelay(gid, "TryFireGun 2 door ", data.CloseDoorDelay[type])
-                     data.offencePoints = data.offencePoints - 1
-                    if groupsize == 1 then
-                        ScheduleCall(GetWeaponReloadPeriodById(id)+0.2,UpdateWeapon,index)
-                    end
+                     data.WeaponsInUse[id] = nil
+                      ScheduleCall(GetWeaponReloadPeriodById(id)+0.2,UpdateWeapon,index)
                  elseif result == FIRE_DOOR then
                      --LogDetail("  Door hit, retry single weapon " .. gid)
                      -- door will be opening, try again soon
@@ -2297,6 +2270,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
                      --LogError(FIRE[result] .. ": close doors after failure")
                      --Log("Fire failed, closing doors")
                      TryCloseWeaponDoorsWithDelay(gid, "TryFireGun 3 door ")
+                     data.WeaponsInUse[id] = nil
                  end
                  table.remove(group, k)
              end
@@ -2304,6 +2278,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
          -- remaining members require painting
          if #group > 0 then
              PaintTarget(group, currentTarget)
+             data.WeaponsInUse[id] = nil
          end
      end
  end
@@ -2314,7 +2289,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      local weaponTypeLeader = GetDeviceType(id)
     local totalCost = WeaponFireCosts[weaponTypeLeader] or Value(0,0)
      local weaponAffinity = data.GroupingAffinity[weaponTypeLeader]
-     local offencePoints = data.offencePoints - 1
+     --local offencePoints = data.offencePoints - 1
      local teamResources = GetTeamResources(teamId)
  
      --LogDetail("Trying to group " .. id .. " of " .. weaponTypeLeader)
@@ -2336,12 +2311,12 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
              and IsWeaponReadyToFire(weaponId)
              --[[and IsDeviceAvailable(weaponId)]]
              and CanAfford(teamResources - totalCost - weaponFireCost)
-             and offencePoints >= 1 then
+             --[[and offencePoints >= 1]] then
              LogDetail("  found group member " .. weaponId .. " affinity " .. tostring(weaponAffinityOfType))
              -- add slave to group and pass to PaintTarget
              table.insert(group, weaponId)
              totalCost = totalCost + weaponFireCost
-             offencePoints = offencePoints - 1
+             --offencePoints = offencePoints - 1
          --[[elseif IsDummy(weaponId) then
              LogDetail("  dummy")]]
          elseif not IsWeaponReadyToFire(weaponId) then
@@ -2970,6 +2945,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
     {
        ["machinegun"] =  0.00,
        ["minigun"] =     0.00,
+       ["minigun2"] =     0.00,
        ["sniper"] =      0.00,
        ["sniper2"] =     0.00,
        ["mortar"] =      0.06,
@@ -2995,6 +2971,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
     {
        ["machinegun"] =  0.00,--Shouldn't fire, but if it did I don't want it to shoot at something that has 2 doors
        ["minigun"] =     0.29,--Base AI has this quite high, Lowered bc sandbags are not counted
+       ["minigun2"] = 0.04,
        ["sniper"] =      0.05,--Note, this does nothing for sniper or machinegun, already does no damage.
        ["sniper2"] =     0.04,--4% chance per update to try to hit a wild shot or if it has no target it takes ~ 1s to fire
        ["mortar"] =      0.15,--Can ignite gunners   
@@ -3020,6 +2997,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
     {
        ["machinegun"] =  0.00,
        ["minigun"] =     0.07,
+       ["minigun2"] = 0.02,
        ["sniper"] =      0.00,
        ["sniper2"] =     0.02,
        ["mortar"] =      0.05,
@@ -3045,6 +3023,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
     {
        ["machinegun"] =  0.00,
        ["minigun"] =     0.09,  
+       ["minigun2"] = 0.05,
        ["sniper"] =      0.00,   
        ["sniper2"] =     0.05,
        ["mortar"] =      0.08,
@@ -3070,6 +3049,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
     {
        ["machinegun"] =  0.02,-- if it could, it would
        ["minigun"] =     0.01,
+       ["minigun2"] = 0.00,
        ["sniper"] =      0.00,
        ["sniper2"] =     0.00,
        ["mortar"] =      0.01,
@@ -3206,12 +3186,53 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"firebeam",   60,-1},
      {"magnabeam",  60,-1},
      {"buzzsaw",    55,-1},
+     { "minigun2",      55,  -1 },
      {"minigun",    55,-1},
      {"flak",       50,-1},
      {"sniper2",    40,-1},
      {"sniper",     20,-1},
      {"repairstation", 5,-1},
   },
+  -- same as minigun
+  ["minigun2"]    = {
+     { "machinegun",    100, -1 },
+     { "turbine2",      99,  -1 },
+     { "mine2",         99,  -1 },
+     { "turbine",       98,  -1 },
+     { "mine",          98,  -1 },
+     { "barrel",        95,  -1 },
+     { "munitions",     92,  -1 },
+     { "factory",       92,  -1 },
+     { "upgrade",       92,  -1 },
+     { "workshop",      91,  -1 },
+     { "armoury",       91,  -1 },
+     { "shotgun",       90,  -1 },
+     { "mortar2",       85,  -1 },
+     { "mortar",        84,  -1 },
+     { "battery",       81,  -1 },
+     { "store",         81,  -1 },
+     { "rocketemp",     80,  -1 },
+     { "rocket",        80,  -1 },
+     { "smokebomb",     80,  -1 },
+     { "missile2",      75,  -1 },
+     { "missile2inv",   75,  -1 },
+     { "missile",       70,  -1 },
+     { "missileinv",    70,  -1 },
+     { "howitzer",      65,  -1 },
+     { "cannon",        65,  -1 },
+     { "laser",         65,  -1 },
+     { "cannon20mm",    60,  -1 },
+     { "firebeam",      60,  -1 },
+     { "magnabeam",     60,  -1 },
+     { "buzzsaw",       55,  -1 },
+     { "minigun2",      55,  -1 },
+     { "minigun",       55,  -1 },
+     { "flak",          50,  -1 },
+     { "sniper2",       40,  -1 },
+     { "sniper",        20,  -1 },
+     { "repairstation", 5,   -1 },
+  },
+ 
  
   ["sniper"] = {
      {"barrel", 100,-1},
@@ -3224,6 +3245,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"sniper2", 85,-1},
      {"cannon", 85,-1},
      {"sniper", 84,-1},
+     { "minigun2",      80,  -1 },
      {"minigun", 80,-1},
      {"rocket", 75,-1},
      {"smokebomb", 75,-15},
@@ -3262,6 +3284,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"laser", 90,-1},
      {"sniper2", 85,-1},
      {"sniper", 84,-1},
+     { "minigun2",    80,  -1 },
      {"minigun", 80,-1},
      {"rocket", 75,-1},
      {"smokebomb", 75,-1},
@@ -3314,6 +3337,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"rocketemp", 50, -1},
      {"sniper2", 50, -1},
      {"sniper", 50, 40},
+     { "minigun2",      50,  -1 },
      {"minigun", 50, -1},
      {"rocket", 50, -1},
      {"smokebomb", 50, -1},
@@ -3351,6 +3375,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"rocketemp", 50, -1},
      {"sniper2", 50, -1},
      {"sniper", 50, -1},
+     { "minigun2",      50,  -1 },
      {"minigun", 50, -1},
      {"rocket", 50, -1},
      {"smokebomb", 50, -1},
@@ -3391,6 +3416,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"rocketemp", 50,-1},
      {"sniper2", 50,-1},
      {"sniper", 50,-1},
+     { "minigun2",      50,  -1 },
      {"minigun", 50,-1},
      {"rocket", 50,-1},
      {"smokebomb", 50,-1},
@@ -3429,6 +3455,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"rocketemp", 50,-1},
      {"sniper2", 50,-1},
      {"sniper", 50,-1},
+     { "minigun2",      50,  -1 },
      {"minigun", 50,-1},
      {"rocket", 50,-1},
      {"smokebomb", 50,-1},
@@ -3452,6 +3479,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"magnabeam", 10, 50},
      {"sniper2", 0, 50},
      {"sniper", 0, 50},
+     { "minigun2",   0,   50 },
      {"minigun", 0, 50},
      {"mortar2", 0, 50},
      {"mortar", 0, 50},
@@ -3475,6 +3503,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"magnabeam", 10, 50},
      {"sniper2", 0, 50},
      {"sniper", 0, 50},
+     { "minigun2",   0,   50 },
      {"minigun", 0, 50},
      {"mortar2", 0, 50},
      {"mortar", 0, 50},
@@ -3514,6 +3543,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
     {"smokebomb", 50, -1},
     {"shotgun", 20, 15},
     {"buzzsaw", 15, -1},
+    { "minigun2",      4,   20, },
     {"minigun", 4, 20,},
     {"sniper2", 4, 15},
     {"flak", 3, 15},
@@ -3550,6 +3580,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"rocket", 60,-1,},
      {"buzzsaw", 60,-1,},
      {"sniper2", 55,-1,},
+     { "minigun2",      50,  -1, },
      {"minigun", 50,-1,},
      {"smokebomb", 50,-1,},
      {"shotgun", 50,-1,},
@@ -3580,6 +3611,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"armoury", 63,-1},
      {"turbine2", 63,-1},
      {"mortar2", 63,-1},
+     { "minigun2",    62, -1 },
      {"minigun", 62,-1},
      {"mortar", 60,-1},
      {"turbine", 60,-1},
@@ -3634,6 +3666,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"munitions", 60,40},
      {"factory", 60,40},
      {"buzzsaw",55,50},
+     { "minigun2",    50, 50 },
      {"minigun",50,50},
      {"upgrade", 21,20},
      {"workshop", 21,20},
@@ -3666,6 +3699,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"turbine", 68, -1},
      {"smokebomb", 60, -1},
      {"buzzsaw", 60, -1},
+     { "minigun2",      50,  20, },
      {"minigun", 50, 20,},
      {"sniper2", 50, 15},
      {"shotgun", 40, 15},
@@ -3739,6 +3773,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"mine2", 40, 75},
      {"mine", 40, 75},
      {"smokebomb", 40, 65},
+     { "minigun2",    40,  65, },
      {"minigun", 40, 65,},
      {"buzzsaw", 30, 65},
      {"flak", 25, 60},
