@@ -294,6 +294,8 @@ function LogTables(Table,IndentLevel)
  {
      ["rocket"] = 0.2,
      ["rocketemp"] = 0.2,
+     ["cannon"] = 0.2,
+     ["howitzer"] = 0.3,
     ["laser"] = 0.5,
  }
  
