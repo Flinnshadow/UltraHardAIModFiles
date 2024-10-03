@@ -123,7 +123,7 @@ function LogTables(Table,IndentLevel)
  data.ConstructionPeriodMin = 1
  data.NoConstructionPauseFactor = 1.1
  data.OffensivePhase = 1
- data.AntiAirPeriod = 0.25-- 0.4
+ data.AntiAirPeriod = 0.2-- 0.4
  data.AntiAirMinTimeToImpact = 1.8
  data.AntiAirReactionTimeMin = 0
  data.AntiAirReactionTimeMax = 0.05
@@ -1478,6 +1478,18 @@ end
    end
    local fortId = math.floor(teamId/MAX_SIDES)
    offset = offset + 2.3*fortId/4
+
+   --[[
+   UpdateAI loop linked to
+      data.UpdateAfterRebuildDelay (0)
+      data.UpdatePeriod (0.2)
+   UpdateWeapons loop linked to
+      data.UpdatePeriod (0.2)
+   TryShootDownProjectiles loop linked to
+      data.AntiAirPeriod (0.2)
+   Repair loop linked to
+      data.RepairPeriod (0.2)
+   ]]
  
    ScheduleCall(2 + offset, UpdateAI)
    ScheduleCall(2.5 + offset, UpdateWeapons)
