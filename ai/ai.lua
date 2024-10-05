@@ -114,6 +114,7 @@ function LogTables(Table,IndentLevel)
  
  offensivePhase = true -- The difficulty is always enough to enable this
  data.UpdatePeriod = 0.2
+ data.UpdateAIPeriod = 0.15
  data.UpdateAfterRebuildDelay = 0
  data.NonConstructionPeriodStdDev = 1
  data.NonConstructionPeriodMean = 1
@@ -493,7 +494,7 @@ function LogTables(Table,IndentLevel)
              end
          end
      end
-     ScheduleCall(data.UpdatePeriod, UpdateAI)
+     ScheduleCall(data.UpdateAIPeriod, UpdateAI)
  end
 
  function UpdateWeapons()
@@ -1820,8 +1821,6 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
    if not priorities[type] then --[[Log("Weapon \"" .. type .. "\" has no target priority list. Aborting fire.")]] return end
    --LogLower("Finding target for " .. type .. "with id " .. weaponId)
  
-   local MaxPriority = 0
-   local bestTarget = {}
    --Log("FailedAttempts: " .. (data.FailedAttempts[weaponId] or 0))
    local balls = (data.FailedAttempts[weaponId] or 0)
    local hitpoints = (data.ProjectileHitpoints[type] or 0) * (#data.TeamWeapons[type] or 0)
@@ -1830,55 +1829,64 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
     -- to account for penetration
     hitpoints = hitpoints + 600
    end
+   local damageMulti = {direct = 1, splash = 1}
    local apple = GetRandomFloat(0,1,"WeaponFireTypeProbabilities"..weaponId)
     local apple2 = GetDeviceType(weaponId)
-    local rolledForTarget = false
     if data.WeaponFireTypeProbabilities.FireAtCoreProbability[apple2] < apple then
        --Log("fire Normaly")
- 
-       for k=1,#priorities[type] do
-          if priorities[type][k][2] < 0 then continue end -- don't cast ray if direct hit has negative priority
-          if MaxPriority > priorities[type][k][2] and MaxPriority > priorities[type][k][3] then break end
-          for key, targetId in pairs(data.DevicesOnEnemyTeam[priorities[type][k][1]]) do
-             -- Get obstructed w priorities[WeaponTable.saveName][k][2] and priorities[WeaponTable.saveName][k][3]
-             -- Max Priority = obs return 1
-             -- Target - obs return 2
-             local targetPos = GetDeviceCentrePosition(targetId)
-             local targetType = GetDeviceType(targetId)
-             if data.GroundDevices[targetType] then
-                targetPos = Vec3(targetPos.x, targetPos.y + data.GroundDevices[targetType], targetPos.z)
-                if ShowObstructionRays then SpawnCircle(targetPos, 10, Blue(92), 5) end
-             end
-             local targetPriority = 0
-             -- IsTargetObstructed(<weaponId>, <type>, <position of target>, <hitpoints>)
-             -- dmgDealt is 100% - HP left of target after hitting (only relevant when splash damage is dealt)
- 
-             --LogLower("Checking target " .. targetType .. " " .. targetId)
-             local targetObstructed, dmgDealt = IsTargetObstructed(weaponId, type, targetPos, hitpoints,needLineOfSight,needLineToStructure, targetId)
-             --LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
-             
-             if not targetObstructed then
-                if dmgDealt then
-                   targetPriority = priorities[type][k][3] * dmgDealt
-                else
-                   targetPriority = priorities[type][k][2]
-                end
-                --LogLower("MaxPriority: " .. MaxPriority .. ", targetPriority: " .. targetPriority)
-                if MaxPriority < targetPriority then
-                   MaxPriority = targetPriority
-                   bestTarget = {targetPos}
-                elseif MaxPriority == targetPriority then
-                   table.insert(bestTarget, targetPos)
-                end
-             end
-          end
-       end
-       if #bestTarget == 0 then
-          data.FailedAttempts[weaponId] = (data.FailedAttempts[weaponId] or 0) + 0.1
-       end
+
     elseif data.WeaponFireTypeProbabilities.FireAtRandomTargetProbability[apple2] < apple then
        --Log("fire At Core")
-       for key, targetId in pairs(data.DevicesOnEnemyTeam["reactor"]) do
+      hitpoints = math.huge
+    elseif data.WeaponFireTypeProbabilities.FireAtRandomTargetWithExtraDamageProbability[apple2] < apple then
+       --Log("fire At RandomTarget")
+
+    elseif data.WeaponFireTypeProbabilities.FireAtPriorityTargetWithExtraDamageProbability[apple2] < apple then
+       --Log("fire At RandomTarget +")
+
+    elseif data.WeaponFireTypeProbabilities.FireAtPriorityTargetWithExtraSplashProbability[apple2] < apple then
+       --Log("fire At Prio Target +")
+      damageMulti = {direct = 1.6, splash = 1}
+    else
+       --Log("fire At Prio Target +Splash")
+      damageMulti = {direct = 1, splash = 2}
+
+    end
+    --Log("Firing at " .. (bestTarget or "nothing"))
+   local target = FindPriorityTarget(type, weaponId, hitpoints, needLineOfSight, needLineToStructure, damageMulti)
+   if target then
+      data.FailedAttempts[weaponId] = math.max((data.FailedAttempts[weaponId] or 0) - 0.3, 0)
+    else return nil end
+    if ShowObstructionRays then SpawnCircle(target, 50, Green(255), 2) end
+    return target
+ 
+   --TargetRandom = RandomFloat%0.000001*1000000+0.01
+ 
+ end
+
+ data.MaxPriority = {}
+ data.BestTarget = {}
+ data.TargetCheckIndex = {}
+ TargetsCheckedPerIteration = 10
+ 
+ function FindPriorityTarget(type, weaponId, hitpoints, needLineOfSight, needLineToStructure, damageMulti)
+    local MaxPriority = data.MaxPriority[weaponId] or 0
+    local bestTarget = data.BestTarget[weaponId] or {}
+    local targetCheckIndex = data.TargetCheckIndex[weaponId] or 0
+    local currentIndex = 1
+ 
+    for k=1,#priorities[type] do
+       if priorities[type][k][2] < 0 then continue end -- don't cast ray if direct hit has negative priority
+       if MaxPriority > priorities[type][k][2] and MaxPriority > priorities[type][k][3] then break end
+       for key, targetId in pairs(data.DevicesOnEnemyTeam[priorities[type][k][1]]) do
+ 
+          if currentIndex <= targetCheckIndex then 
+             -- skip targets we've already checked
+             -- (might potentially skip some unchecked targets if some were destroyed)
+             currentIndex = currentIndex + 1
+             continue
+          end
+ 
           -- Get obstructed w priorities[WeaponTable.saveName][k][2] and priorities[WeaponTable.saveName][k][3]
           -- Max Priority = obs return 1
           -- Target - obs return 2
@@ -1893,190 +1901,48 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
           -- dmgDealt is 100% - HP left of target after hitting (only relevant when splash damage is dealt)
  
           --LogLower("Checking target " .. targetType .. " " .. targetId)
-          local targetObstructed, dmgDealt = IsTargetObstructed(weaponId, type, targetPos, math.huge ,needLineOfSight,needLineToStructure, targetId)
+          local targetObstructed, dmgDealt = IsTargetObstructed(weaponId, type, targetPos, hitpoints,needLineOfSight,needLineToStructure, targetId, damageMulti)
           --LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
           
           if not targetObstructed then
-             return targetPos
-          end
-       end
-    elseif data.WeaponFireTypeProbabilities.FireAtRandomTargetWithExtraDamageProbability[apple2] < apple then
-       --Log("fire At RandomTarget")
-       local i=10
-       repeat
-          for key, targetId in pairs(data.DevicesOnEnemyTeam[AllTypesOfDevicesAndWeapons[GetRandomInteger(1,#AllTypesOfDevicesAndWeapons,"randomDevice"..i)]]) do
-             -- Get obstructed w priorities[WeaponTable.saveName][k][2] and priorities[WeaponTable.saveName][k][3]
-             -- Max Priority = obs return 1
-             -- Target - obs return 2
-             local targetPos = GetDeviceCentrePosition(targetId)
-             local targetType = GetDeviceType(targetId)
-             if data.GroundDevices[targetType] then
-                targetPos = Vec3(targetPos.x, targetPos.y + data.GroundDevices[targetType], targetPos.z)
-                if ShowObstructionRays then SpawnCircle(targetPos, 10, Blue(92), 5) end
+             if dmgDealt then
+                targetPriority = priorities[type][k][3] * dmgDealt
+             else
+                targetPriority = priorities[type][k][2]
              end
-             local targetPriority = 0
-             -- IsTargetObstructed(<weaponId>, <type>, <position of target>, <hitpoints>)
-             -- dmgDealt is 100% - HP left of target after hitting (only relevant when splash damage is dealt)
-    
-             --LogLower("Checking target " .. targetType .. " " .. targetId)
-             local targetObstructed, dmgDealt = IsTargetObstructed(weaponId, type, targetPos, hitpoints,needLineOfSight,needLineToStructure, targetId)
-             --LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
-             
-             if not targetObstructed then
-                return targetPos
-                --[[if dmgDealt then
-                   targetPriority = priorities[type][k][3] * dmgDealt
-                else
-                   targetPriority = priorities[type][k][2]
-                end
-                return targetPos
-                LogLower("MaxPriority: " .. MaxPriority .. ", targetPriority: " .. targetPriority)
-                if MaxPriority < targetPriority then
-                   MaxPriority = targetPriority
-                   bestTarget = targetPos
-                end]]
+             --LogLower("MaxPriority: " .. MaxPriority .. ", targetPriority: " .. targetPriority)
+             if MaxPriority < targetPriority then
+                MaxPriority = targetPriority
+                bestTarget = {targetPos}
+             elseif MaxPriority == targetPriority then
+                table.insert(bestTarget, targetPos)
              end
           end
-          i=i-1
-       until i==0
  
-    elseif data.WeaponFireTypeProbabilities.FireAtPriorityTargetWithExtraDamageProbability[apple2] < apple then
-       --Log("fire At RandomTarget +")
-       local i=10
-       repeat
-          for key, targetId in pairs(data.DevicesOnEnemyTeam[AllTypesOfDevicesAndWeapons[GetRandomInteger(1,#AllTypesOfDevicesAndWeapons,"randomDevice"..i)]]) do
-             -- Get obstructed w priorities[WeaponTable.saveName][k][2] and priorities[WeaponTable.saveName][k][3]
-             -- Max Priority = obs return 1
-             -- Target - obs return 2
-             local targetPos = GetDeviceCentrePosition(targetId)
-             local targetType = GetDeviceType(targetId)
-             if data.GroundDevices[targetType] then
-                targetPos = Vec3(targetPos.x, targetPos.y + data.GroundDevices[targetType], targetPos.z)
-                if ShowObstructionRays then SpawnCircle(targetPos, 10, Blue(92), 5) end
-             end
-             local targetPriority = 0
-             -- IsTargetObstructed(<weaponId>, <type>, <position of target>, <hitpoints>)
-             -- dmgDealt is 100% - HP left of target after hitting (only relevant when splash damage is dealt)
-    
-             --LogLower("Checking target " .. targetType .. " " .. targetId)
-             local targetObstructed, dmgDealt = IsTargetObstructed(weaponId, type, targetPos, hitpoints,needLineOfSight,needLineToStructure, targetId,{direct = 1.6,splash = 1})
-             --LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
-             
-             if not targetObstructed then
-                return targetPos
-                --[[if dmgDealt then
-                   targetPriority = priorities[type][k][3] * dmgDealt
-                else
-                   targetPriority = priorities[type][k][2]
-                end
-                return targetPos
-                LogLower("MaxPriority: " .. MaxPriority .. ", targetPriority: " .. targetPriority)
-                if MaxPriority < targetPriority then
-                   MaxPriority = targetPriority
-                   bestTarget = targetPos
-                end]]
-             end
+          if currentIndex % TargetsCheckedPerIteration == 0 then
+             -- Reached target check limit, saving progress and resuming later
+             data.MaxPriority[weaponId] = MaxPriority
+             data.BestTarget[weaponId] = bestTarget
+             data.TargetCheckIndex[weaponId] = currentIndex
+             return nil
           end
-          i=i-1
-       until i==0
- 
-    elseif data.WeaponFireTypeProbabilities.FireAtPriorityTargetWithExtraSplashProbability[apple2] < apple then
-       --Log("fire At Prio Target +")
-       for k=1,#priorities[type] do
-          if priorities[type][k][2] < 0 then continue end -- don't cast ray if direct hit has negative priority
-          if MaxPriority > priorities[type][k][2] and MaxPriority > priorities[type][k][3] then break end
-          for key, targetId in pairs(data.DevicesOnEnemyTeam[priorities[type][k][1]]) do
-             -- Get obstructed w priorities[WeaponTable.saveName][k][2] and priorities[WeaponTable.saveName][k][3]
-             -- Max Priority = obs return 1
-             -- Target - obs return 2
-             local targetPos = GetDeviceCentrePosition(targetId)
-             local targetType = GetDeviceType(targetId)
-             if data.GroundDevices[targetType] then
-                targetPos = Vec3(targetPos.x, targetPos.y + data.GroundDevices[targetType], targetPos.z)
-                if ShowObstructionRays then SpawnCircle(targetPos, 10, Blue(92), 5) end
-             end
-             local targetPriority = 0
-             -- IsTargetObstructed(<weaponId>, <type>, <position of target>, <hitpoints>)
-             -- dmgDealt is 100% - HP left of target after hitting (only relevant when splash damage is dealt)
- 
-             --LogLower("Checking target " .. targetType .. " " .. targetId)
-             local targetObstructed, dmgDealt = IsTargetObstructed(weaponId, type, targetPos, hitpoints,needLineOfSight,needLineToStructure, targetId,{direct = 1.6,splash = 1})
-             --LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
-             
-             if not targetObstructed then
-                if dmgDealt then
-                   targetPriority = priorities[type][k][3] * dmgDealt
-                else
-                   targetPriority = priorities[type][k][2]
-                end
-                LogLower("MaxPriority: " .. MaxPriority .. ", targetPriority: " .. targetPriority)
-                if MaxPriority < targetPriority then
-                   MaxPriority = targetPriority
-                   bestTarget = {targetPos}
-                elseif MaxPriority == targetPriority then
-                   table.insert(bestTarget, targetPos)
-                end
-             end
-          end
+          
+          currentIndex = currentIndex + 1
        end
-       if #bestTarget == 0 then
-          data.FailedAttempts[weaponId] = (data.FailedAttempts[weaponId] or 0) + 1
-       end
-       rolledForTarget = true
-    else
-       --Log("fire At Prio Target +Splash")
-       for k=1,#priorities[type] do
-          if priorities[type][k][2] < 0 then continue end -- don't cast ray if direct hit has negative priority
-          if MaxPriority > priorities[type][k][2] and MaxPriority > priorities[type][k][3] then break end
-          for key, targetId in pairs(data.DevicesOnEnemyTeam[priorities[type][k][1]]) do
-             -- Get obstructed w priorities[WeaponTable.saveName][k][2] and priorities[WeaponTable.saveName][k][3]
-             -- Max Priority = obs return 1
-             -- Target - obs return 2
-             local targetPos = GetDeviceCentrePosition(targetId)
-             local targetType = GetDeviceType(targetId)
-             if data.GroundDevices[targetType] then
-                targetPos = Vec3(targetPos.x, targetPos.y + data.GroundDevices[targetType], targetPos.z)
-                if ShowObstructionRays then SpawnCircle(targetPos, 10, Blue(92), 5) end
-             end
-             local targetPriority = 0
-             -- IsTargetObstructed(<weaponId>, <type>, <position of target>, <hitpoints>)
-             -- dmgDealt is 100% - HP left of target after hitting (only relevant when splash damage is dealt)
- 
-             LogLower("Checking target " .. targetType .. " " .. targetId)
-             local targetObstructed, dmgDealt = IsTargetObstructed(weaponId, type, targetPos, hitpoints,needLineOfSight,needLineToStructure, targetId,{direct = 1,splash = 2})
-             LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
-             
-             if not targetObstructed then
-                if dmgDealt then
-                   targetPriority = priorities[type][k][3] * dmgDealt
-                else
-                   targetPriority = priorities[type][k][2]
-                end
-                LogLower("MaxPriority: " .. MaxPriority .. ", targetPriority: " .. targetPriority)
-                if MaxPriority < targetPriority then
-                   MaxPriority = targetPriority
-                   bestTarget = {targetPos}
-                elseif MaxPriority == targetPriority then
-                   table.insert(bestTarget, targetPos)
-                end
-             end
-          end
-       end
-       if #bestTarget == 0 then
-          data.FailedAttempts[weaponId] = (data.FailedAttempts[weaponId] or 0) + 1
-       end
-       rolledForTarget = true
     end
-    --Log("Firing at " .. (bestTarget or "nothing"))
-    if #bestTarget > 0 then
-      data.FailedAttempts[weaponId] = math.max((data.FailedAttempts[weaponId] or 0) - 0.3, 0)
-    else return nil end
-    local target = bestTarget[GetRandomInteger(1, #bestTarget, "FindPriorityTarget " .. bestTarget[1].x)]
-    if ShowObstructionRays then SpawnCircle(target, 50, Green(255), 2) end
-    return target
+    -- looped through all devices or until good target was found, resetting progress
+    data.MaxPriority[weaponId] = 0
+    data.BestTarget[weaponId] = {}
+    data.TargetCheckIndex[weaponId] = 0
  
-   --TargetRandom = RandomFloat%0.000001*1000000+0.01
+    if #bestTarget == 0 then
+       -- could not find a valid target, resetting progress and trying again later
+        data.FailedAttempts[weaponId] = (data.FailedAttempts[weaponId] or 0) + 0.1
+        return nil
+    end
  
+    -- if several targets have the same priority, pick random one of them
+    return bestTarget[GetRandomInteger(1, #bestTarget, "FindPriorityTarget " .. bestTarget[1].x)]
  end
  
  -- returns:
@@ -2453,7 +2319,8 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      data.WeaponsInUse[id] = true
 
      if not useGroup then
-         group = SelectWeaponGroup(id)
+         --group = SelectWeaponGroup(id)
+         group = {id}
      end
     
     if not target then
