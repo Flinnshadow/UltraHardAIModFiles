@@ -114,6 +114,7 @@ function LogTables(Table,IndentLevel)
  
  offensivePhase = true -- The difficulty is always enough to enable this
  data.UpdatePeriod = 0.2
+ data.UpdateWeaponsPeriod = 0
  data.UpdateAIPeriod = 0.15
  data.UpdateAfterRebuildDelay = 0
  data.NonConstructionPeriodStdDev = 1
@@ -537,7 +538,7 @@ function LogTables(Table,IndentLevel)
       --LogEnum("Offence bucket = " .. data.offenceBucket)                                                                    //IMPORTANT, unless luac is smart, each LogEnum call is just wasted time, remove them if you can.
    end
 
-   ScheduleCall(data.UpdatePeriod, UpdateWeapons)
+   ScheduleCall(data.UpdateWeaponsPeriod, UpdateWeapons)
 end
  
  function UpdateWeapon(index)
@@ -1363,6 +1364,7 @@ end
    "workshop",
    "armoury", 
    "barrel",
+   "battery2", 
    "battery", 
    "mine2",
    "mine",
@@ -3289,6 +3291,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"shotgun",    90,-1},
      {"mortar2",    85,-1},
      {"mortar",     84,-1},
+     {"battery2",   82,-1},
      {"battery",    81,-1},
      {"store",      81,-1},
      {"rocketemp",  80,-1},
@@ -3328,6 +3331,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      { "shotgun",       90,  -1 },
      { "mortar2",       85,  -1 },
      { "mortar",        84,  -1 },
+     { "battery2",      82,  -1 },
      { "battery",       81,  -1 },
      { "store",         81,  -1 },
      { "rocketemp",     80,  -1 },
@@ -3383,6 +3387,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"upgrade", 51,-1},
      {"workshop", 50,-1},
      {"armoury", 50,-1},
+     {"battery2", 51,-1},
      {"battery", 50,-1},
      {"mine2", 10,-1},
      {"mine", 9,-1},
@@ -3422,6 +3427,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"upgrade", 51,-1},
      {"workshop", 50,-1},
      {"armoury", 50,-1},
+     {"battery2", 31,-1},
      {"battery", 30,-1},
      {"mine2", 20,-1},
      {"store", 5,-1},
@@ -3437,6 +3443,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"mine2", 90, -1},
      {"turbine2", 85, -1},
      {"turbine", 80, -1},
+     {"battery2", 31, 75},
      {"battery", 30, 75},
      {"cannon", 65, -1},
      {"laser", 65, -1},
@@ -3489,6 +3496,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"laser", 65, -1},
      {"cannon20mm", 60, -1},
      {"firebeam", 60, 50},
+     {"battery2", 31, 60},
      {"battery", 30, 60},
      {"buzzsaw", 50, -1},
      {"rocketemp", 50, -1},
@@ -3527,6 +3535,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"howitzer", 70,-1},
      {"cannon", 65,-1},
      {"laser", 65,-1},
+     {"battery2", 62,-1},
      {"battery", 61,-1},
      {"cannon20mm", 60,-1},
      {"firebeam", 60,-1},
@@ -3566,6 +3575,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"howitzer", 70,-1},
      {"cannon", 65,-1},
      {"laser", 65,-1},
+     {"battery2", 62,-1},
      {"battery", 61,-1},
      {"cannon20mm", 60,-1},
      {"firebeam", 60,-1},
@@ -3649,6 +3659,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
     {"firebeam", 80, 35},
     {"magnabeam", 80, 10},
     {"barrel", 30, 80,},
+    {"battery2", 76, 50},
     {"battery", 75, 50},
     {"mine2", 71, -1},
     {"mortar2", 71, 50},
@@ -3687,6 +3698,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"cannon20mm", 90,-1,},
      {"firebeam", 80,-1,},
      {"magnabeam", 80,-1,},
+     {"battery2", 76,-1,},
      {"battery", 75,-1,},
      {"mine2", 71,-1,},
      {"mortar2", 71,-1,},
@@ -3721,6 +3733,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"rocketemp", 70,-1},
      {"rocket", 70,-1},
      {"firebeam", 70,-1},
+     {"battery2", 66,-1},
      {"battery", 65,-1},
      {"barrel", 65,-1},
      {"munitions", 64,-1},
@@ -3757,6 +3770,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"turbine", 70,60},
      {"munitions", 64,70},
      {"factory", 64,70},
+     {"battery2", 66,60},
      {"battery", 65,60},
      {"barrel", 65,30},
      {"upgrade", 64,65},
@@ -3778,6 +3792,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"cannon20mm", 50,75},
      {"turbine2", 75,50},
      {"turbine", 70,50},
+     {"battery2", 66,50},
      {"battery", 65,50},
      {"barrel", 65,60},
      {"rocketemp", 60,60},
@@ -3809,6 +3824,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"cannon20mm", 95, 80},
      {"cannon", 90, 50},
      {"barrel", 90, 80,},
+     {"battery2", 76, 60},
      {"battery", 75, 60},
      {"mortar2", 71, 60},
      {"mortar", 70, 50},
@@ -3842,6 +3858,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
   },
  
   ["cannon20mm"] = {
+     {"battery2", 66,25},
      {"battery", 65,25},
      {"barrel", 65,60},
      {"machinegun", 60,10},
@@ -3868,6 +3885,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
   ["buzzsaw"] = {
      {"reactor", 140,200},
      {"barrel", 80, 195},
+     {"battery2", 76, 195},
      {"battery", 75, 195},
      {"munitions", 30, 170},
      {"factory", 30, 170},
@@ -3917,6 +3935,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
      {"missile", 0, 90},
      {"missileinv", 0, 90},
      {"howitzer", 20, 85},
+     {"battery2", 51, 10},
      {"battery", 50, 10},
      {"factory", 50, 10},
      {"munitions", 50, 10},
