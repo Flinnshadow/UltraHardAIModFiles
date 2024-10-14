@@ -1777,7 +1777,9 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
  function RepairEnumeratedLink(nodeA, nodeB, saveName, relativeHealth, stress, segmentsOnFire, deviceId)
      if relativeHealth < data.repairDamageThreshold or segmentsOnFire > 0 then
          if nodeA and nodeB then
-             RepairLink(nodeA, nodeB)
+            if data.OpenDoors[nodeA .. " " .. nodeB] ~= true then
+               RepairLink(nodeA, nodeB)
+            end
              --linkRepairCount = linkRepairCount + 1
          end
      end
