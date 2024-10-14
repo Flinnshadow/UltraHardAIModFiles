@@ -647,6 +647,8 @@ end
      --return GetWeaponReloadPeriodById(id) > 2*data.AntiAirPeriod
  end
  
+WeaponsCheckedPerIteration = 10
+ 
  function TryShootDownProjectiles()
       if data.gameWinner and data.gameWinner ~= teamId then return end
    
@@ -1182,6 +1184,11 @@ end
                   end
    
                   data.NextAntiAirIndex = index + 1
+                  --Log("".. data.NextAntiAirIndex)
+                  if data.NextAntiAirIndex % WeaponsCheckedPerIteration == 0 then
+                     --Log("" .. data.NextAntiAirIndex .. " ending loop")
+                     break
+                  end
               end
           end
       end
