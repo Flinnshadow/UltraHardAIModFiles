@@ -1823,7 +1823,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
    --LogLower("Finding target for " .. type .. "with id " .. weaponId)
  
    --Log("FailedAttempts: " .. (data.FailedAttempts[weaponId] or 0))
-   local balls = (data.FailedAttempts[weaponId] or 0)
+   local balls = (data.FailedAttempts[weaponId] or 0)/10
    local hitpoints = (data.ProjectileHitpoints[type] or 0) * (#data.TeamWeapons[type] or 0)
    hitpoints = hitpoints * 1.05 ^ balls * (0.07*balls + 1)
    if type == "sniper2" then
