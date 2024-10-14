@@ -409,6 +409,7 @@ function LogTables(Table,IndentLevel)
                          --LogDetail("Rebuild succeeded and skipped")
                      end
                  else
+                     skipAction = true -- so that the main build order will continue if rebuilding softlocks
                      LogError("Rebuild action " .. k .. " failed")
                      if not skipAction then
                          --LogOriginalToActual()
@@ -467,6 +468,12 @@ function LogTables(Table,IndentLevel)
                  data.fortIndex = data.fortIndex + 1
                  if not skip then break end
              else
+               if ACTION[action.Type] == "DESTROY_NODE" then
+                 -- sometimes gets softlocked trying to destroy a node that no longer exists
+                 -- skip, and retry later
+                 data.Rebuild[data.fortIndex] = true
+                 data.fortIndex = data.fortIndex + 1
+               end
                  break
              end
          end
