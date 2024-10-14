@@ -735,16 +735,15 @@ end
                         
                         -- modified --
                         if projectileSaveName ~= "missile" then
-                           local m = GetProjectileParamFloat(type, teamId, "ProjectileMass", 0)
-                           local g = GetProjectileTypeGravity(type, teamId)
+                           local weaponProjSaveName = GetWeaponSelectedAmmo(id)
+                           local m = GetProjectileParamFloat(weaponProjSaveName, teamId, "ProjectileMass", 0)
+                           local g = GetProjectileTypeGravity(weaponProjSaveName, teamId)
                            if g == 0 then g = 0.00001 end
-                           local b = GetProjectileTypeDrag(type, teamId)
+                           local b = GetProjectileTypeDrag(weaponProjSaveName, teamId)
                            if b == 0 then b = 0.00001 end
-                           local vel = GetWeaponTypeProjectileSpeed(type)
-      
+                           local vel = GetWeaponTypeProjectileSpeed(weaponProjSaveName)
+       
                            -- Log(tostring(m) .. " " .. tostring(g) .. " " .. tostring(b) .. " " .. tostring(vel))
-      
-                           local radius = m/b*(vel + m*g/b*math.log(m*g/(b*vel + m*g)))
       
                               -- projectile position relative to AA
                               local projectilePosition = function(time)
@@ -767,14 +766,15 @@ end
                                  guess = guess + math.pi
                               end
    
-                              angleDifferencePrime = function(x)
-                                 return (angleDifference(x + 0.00001, time) - angleDifference(x, time)) / 0.00001
-                              end
-   
-                              -- applying four iterations of newton's method
-                              guess = guess - angleDifference(guess, time) / angleDifferencePrime(guess)
-                              guess = guess - angleDifference(guess, time) / angleDifferencePrime(guess)
-                              return  guess - angleDifference(guess, time) / angleDifferencePrime(guess)
+                              -- applying three iterations of newton's method
+                              local temp = angleDifference(guess, time)
+                              guess = guess - temp / (angleDifference(guess + 0.00001, time) - temp) * 0.00001
+
+                              temp = angleDifference(guess, time)
+                              guess = guess - temp / (angleDifference(guess + 0.00001, time) - temp) * 0.00001
+
+                              temp = angleDifference(guess, time)
+                              return guess - temp / (angleDifference(guess + 0.00001, time) - temp) * 0.00001
                            end
    
                            local timeDifference = function(time)
@@ -783,15 +783,13 @@ end
                               return -m/b*math.log(1 - position.x*b/(m*velocity_x)) - time + leadTime
                            end
    
-                           -- find the value of time such that the above function evaluates to zero
-                           local timeDifferencePrime = function(x)
-                              return (timeDifference(x + 0.00001) - timeDifference(x)) / 0.00001
-                           end
-   
-                           -- applying four iterations of newton's method
-                           timeToImpact = timeToImpact - timeDifference(timeToImpact) / timeDifferencePrime(timeToImpact)
-                           timeToImpact = timeToImpact - timeDifference(timeToImpact) / timeDifferencePrime(timeToImpact)
-   
+                           -- applying two iterations of newton's method
+                           local temp = timeDifference(timeToImpact)
+                           timeToImpact = timeToImpact - temp / (timeDifference(timeToImpact + 0.00001) - temp) * 0.00001
+
+                           temp = timeDifference(timeToImpact)
+                           timeToImpact = timeToImpact - temp / (timeDifference(timeToImpact + 0.00001) - temp) * 0.00001
+
                            local accuracy = timeDifference(timeToImpact)
                            local optimalAngle = angleApproximation(timeToImpact)
    
@@ -1055,8 +1053,8 @@ end
                           end
                           
                           if not blocked then
-                              --local projSaveName = GetWeaponSelectedAmmo(id)
-                              --local projParams = GetProjectileParams(projSaveName, teamId)
+                              local projSaveName = GetWeaponSelectedAmmo(id)
+                              local projParams = GetProjectileParams(projSaveName, teamId)
    
                               --[[if hasbit(projParams.FieldType, FIELD2_DECOY_ENEMY_BIT) then
                                   pos = AimDecoyAtEnemy(pos, id, projParams, fieldBlockFlags)
@@ -1070,22 +1068,20 @@ end
                               -- SpawnCircle(pos, 10, Red(), 10)
    
                               local projectileId = v.ProjectileNodeId
-                              local weaponProjSaveName = GetWeaponSelectedAmmo(id)
-                              local b = GetProjectileTypeDrag(weaponProjSaveName, teamId)
-                              
                               local projectileSaveName = AA_GetNodeProjectileSaveName(projectileId)
          
                               -- correction for projectiles with air resistance
+                           local b = GetProjectileTypeDrag(projSaveName, teamId)
                               if b > 0 and projectileSaveName ~= "missile" and timeToImpact < math.huge then
                                  -- Log(tostring(timeToImpact))
          
                                  local posA = AA_NodePosition(projectileId)
                                  local delta = weaponPos - posA
          
-                                 local m = GetProjectileParamFloat(weaponProjSaveName, teamId, "ProjectileMass", 0)
-                                 local g = GetProjectileTypeGravity(weaponProjSaveName, teamId)
+                                 local m = GetProjectileParamFloat(projSaveName, teamId, "ProjectileMass", 0)
+                                 local g = GetProjectileTypeGravity(projSaveName, teamId)
                                  if g == 0 then g = 0.00001 end
-                                 local vel = GetWeaponTypeProjectileSpeed(weaponProjSaveName)
+                                 local vel = GetWeaponTypeProjectileSpeed(projSaveName)
       
                                  -- Log(tostring(m) .. " " .. tostring(g) .. " " .. tostring(b) .. " " .. tostring(vel))
       
@@ -1109,15 +1105,16 @@ end
                                     if position.x < 0 then
                                        guess = guess + math.pi
                                     end
-      
-                                    angleDifferencePrime = function(x)
-                                       return (angleDifference(x + 0.00001, time) - angleDifference(x, time)) / 0.00001
-                                    end
-      
-                                    -- applying four iterations of newton's method
-                                    guess = guess - angleDifference(guess, time) / angleDifferencePrime(guess)
-                                    guess = guess - angleDifference(guess, time) / angleDifferencePrime(guess)
-                                    return  guess - angleDifference(guess, time) / angleDifferencePrime(guess)
+   
+                                    -- applying three iterations of newton's method
+                                    local temp = angleDifference(guess, time)
+                                    guess = guess - temp / (angleDifference(guess + 0.00001, time) - temp) * 0.00001
+   
+                                    temp = angleDifference(guess, time)
+                                    guess = guess - temp / (angleDifference(guess + 0.00001, time) - temp) * 0.00001
+   
+                                    temp = angleDifference(guess, time)
+                                    return guess - temp / (angleDifference(guess + 0.00001, time) - temp) * 0.00001
                                  end
       
                                  local optimalAngle = angleApproximation(timeToImpact)
