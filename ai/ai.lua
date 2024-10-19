@@ -114,7 +114,7 @@ function LogTables(Table,IndentLevel)
  
  offensivePhase = true -- The difficulty is always enough to enable this
  data.UpdatePeriod = 0.2
- data.UpdateWeaponsPeriod = 0
+ data.UpdateWeaponsPeriod = 0.08
  data.UpdateAIPeriod = 0.15
  data.UpdateAfterRebuildDelay = 0
  data.NonConstructionPeriodStdDev = 1
@@ -125,7 +125,7 @@ function LogTables(Table,IndentLevel)
  data.ConstructionPeriodMin = 1
  data.NoConstructionPauseFactor = 1.1
  data.OffensivePhase = 1
- data.AntiAirPeriod = 0.2-- 0.4
+ data.AntiAirPeriod = 0.08-- 0.4
  data.AntiAirMinTimeToImpact = 1.8
  data.AntiAirReactionTimeMin = 0
  data.AntiAirReactionTimeMax = 0.05
@@ -957,7 +957,7 @@ WeaponsCheckedPerIteration = 10
                           --Log("best_pos " .. tostring(best_pos) .. " target node " .. bestTarget.ProjectileNodeId)
    
                           local projectileGroup = {}
-                          if closestTimeToImpact > maxUncertainty then
+                          --[[if closestTimeToImpact > maxUncertainty then
                               -- search for nearby targets and aim for the middle
                               local accPos = Vec3()
                               local accVel = Vec3()
@@ -986,7 +986,7 @@ WeaponsCheckedPerIteration = 10
                                   best_pos = (1/count)*accPos;
                                   best_vel = (1/count)*accVel;
                               end
-                          end
+                          end]]
    
                           local v = bestTarget
                           local pos = best_pos
@@ -1505,9 +1505,9 @@ end
       data.RepairPeriod (0.2)
    ]]
  
-   ScheduleCall(2 + offset, UpdateAI)
-   ScheduleCall(2.5 + offset, UpdateWeapons)
-   ScheduleCall(1.5 + offset, TryShootDownProjectiles)
+   ScheduleCall(offset, UpdateAI)
+   ScheduleCall(0.04 + offset, UpdateWeapons)
+   ScheduleCall(0.08 + offset, TryShootDownProjectiles)
    if not data.HumanAssist then
       ScheduleCall(7 + offset, Repair)
       if not data.DisableFrustration then ScheduleCall(30 + offset, DecayFrustration) end
@@ -1837,7 +1837,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
    --LogLower("Finding target for " .. type .. "with id " .. weaponId)
  
    --Log("FailedAttempts: " .. (data.FailedAttempts[weaponId] or 0))
-   local balls = (data.FailedAttempts[weaponId] or 0)/10
+   local balls = (data.FailedAttempts[weaponId] or 0)/5
    local hitpoints = (data.ProjectileHitpoints[type] or 0) * (#data.TeamWeapons[type] or 0)
    hitpoints = hitpoints * 1.05 ^ balls * (0.07*balls + 1)
    if type == "sniper2" then
@@ -1870,7 +1870,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
     --Log("Firing at " .. (bestTarget or "nothing"))
    local target = FindPriorityTarget(type, weaponId, hitpoints, needLineOfSight, needLineToStructure, damageMulti)
    if target then
-      data.FailedAttempts[weaponId] = math.max((data.FailedAttempts[weaponId] or 0) - 0.3, 0)
+      data.FailedAttempts[weaponId] = math.max((data.FailedAttempts[weaponId] or 0) - 0.3/5, 0)
     else return nil end
     if ShowObstructionRays then SpawnCircle(target, 50, Green(255), 2) end
     return target
