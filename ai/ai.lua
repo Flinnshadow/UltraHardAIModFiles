@@ -158,30 +158,6 @@ function LogTables(Table,IndentLevel)
  data.ProjectileHitpoints["howitzer"] = 450 -- apparently it's set to 1000 default which doesn't make sense, 450 correct direct dmg but less so that it doesnt penetrate metal
  data.ProjectileHitpoints["minigun"] = 100  -- actual damage is 227.5 if all shots land
  data.ProjectileHitpoints["minigun2"] = 30  -- +600 added after available weapon multiplier
-
- data.AntiAirInclude["cannon"] = { ["howitzer"] = true, }
- data.AntiAirInclude["cannon20mm"] = { ["howitzer"] = true, }
- data.AntiAirInclude["mortar"] = { ["cannon"] = true, ["howitzer"] = true, }
- data.AntiAirInclude["mortar2"] = { ["cannon"] = true, ["howitzer"] = true, }
- data.AntiAirInclude["rocket"] = { ["balls"] = false, } -- to make them shoot at nothing
- data.AntiAirInclude["rocketemp"] = { ["balls"] = false, } -- to make them shoot at nothing
- data.AntiAirInclude["howitzer"] = { ["balls"] = false, } -- to make them shoot at nothing
- data.AntiAirInclude["buzzsaw"] = { ["howitzer"] = true, ["missile2"] = true, }
- data.AntiAirInclude["laser"] = { ["balls"] = false, }     -- to make them shoot at nothing
- data.AntiAirInclude["firebeam"] = { ["balls"] = false, }  -- to make them shoot at nothing
- data.AntiAirInclude["magnabeam"] = { ["balls"] = false, } -- to make them shoot at nothing
- data.AntiAirInclude["minigun2"] = { ["balls"] = false, }  -- to make them shoot at nothing
- --data.AntiAirExclude["mortar"] = { ["mortar"] = true, ["mortar2"] = true, ["missile"] = true, }
- --data.AntiAirExclude["mortar2"] = { ["mortar"] = true, ["mortar2"] = true, ["missile"] = true, }
- 
- data.AntiAirCanClaim = {
-   ["sniper"] = { ["mortar"] = true, ["mortar2"] = true, ["missile"] = true, ["rocketemp"] = true, ["rocket"] = true, },
-   ["machinegun"] = { ["mortar"] = true, ["mortar2"] = true, ["missile"] = true, ["rocketemp"] = true, ["rocket"] = true, },
-   ["minigun"] = { ["mortar"] = true, ["mortar2"] = true, ["missile"] = true, ["rocketemp"] = true, ["rocket"] = true, ["howitzer"] = true,},
-   ["shotgun"] = { ["mortar"] = true, ["mortar2"] = true, ["missile"] = true, ["missile2"] = true, ["rocketemp"] = true, ["rocket"] = true, ["howitzer"] = true, },
-   ["cannon"] = { ["howitzer"] = true, },
-   ["cannon20mm"] = { ["howitzer"] = true, },
-}
  
  data.AntiAirLateralStdDev =
  {
@@ -655,8 +631,14 @@ end
  end
  
 WeaponsCheckedPerIteration = 10
- 
- function TryShootDownProjectiles()
+
+(function()
+   local OrgAACode = TryShootDownProjectiles
+   TryShootDownProjectiles = function()
+      if data.HumanAssist then
+         OrgAACode()
+         return
+      end
       if data.gameWinner and data.gameWinner ~= teamId then return end
    
       for id,lockdown in pairs(data.AntiAirLockDown) do
@@ -1202,6 +1184,7 @@ WeaponsCheckedPerIteration = 10
    
       ScheduleCall(data.AntiAirPeriod, TryShootDownProjectiles)
    end
+end)()
    
    function PredictProjectilePos(projectileId, time)
       local vel = AA_NodeVelocity(projectileId)
@@ -1479,6 +1462,32 @@ end
    data.offenceBucket = 0 -- tracks the opportunities for offence
    data.offencePoints = 100000000 -- shooting weapons require these points so mission scripts can throttle or gate offence
    data.maxGroupSize = 1
+   
+   if not data.HumanAssist then
+      data.AntiAirInclude["cannon"] = { ["howitzer"] = true, }
+      data.AntiAirInclude["cannon20mm"] = { ["howitzer"] = true, }
+      data.AntiAirInclude["mortar"] = { ["cannon"] = true, ["howitzer"] = true, }
+      data.AntiAirInclude["mortar2"] = { ["cannon"] = true, ["howitzer"] = true, }
+      data.AntiAirInclude["rocket"] = { ["balls"] = false, } -- to make them shoot at nothing
+      data.AntiAirInclude["rocketemp"] = { ["balls"] = false, } -- to make them shoot at nothing
+      data.AntiAirInclude["howitzer"] = { ["balls"] = false, } -- to make them shoot at nothing
+      data.AntiAirInclude["buzzsaw"] = { ["howitzer"] = true, ["missile2"] = true, }
+      data.AntiAirInclude["laser"] = { ["balls"] = false, }     -- to make them shoot at nothing
+      data.AntiAirInclude["firebeam"] = { ["balls"] = false, }  -- to make them shoot at nothing
+      data.AntiAirInclude["magnabeam"] = { ["balls"] = false, } -- to make them shoot at nothing
+      data.AntiAirInclude["minigun2"] = { ["balls"] = false, }  -- to make them shoot at nothing
+      --data.AntiAirExclude["mortar"] = { ["mortar"] = true, ["mortar2"] = true, ["missile"] = true, }
+      --data.AntiAirExclude["mortar2"] = { ["mortar"] = true, ["mortar2"] = true, ["missile"] = true, }
+
+      data.AntiAirCanClaim = {
+         ["sniper"] = { ["mortar"] = true, ["mortar2"] = true, ["missile"] = true, ["rocketemp"] = true, ["rocket"] = true, },
+         ["machinegun"] = { ["mortar"] = true, ["mortar2"] = true, ["missile"] = true, ["rocketemp"] = true, ["rocket"] = true, },
+         ["minigun"] = { ["mortar"] = true, ["mortar2"] = true, ["missile"] = true, ["rocketemp"] = true, ["rocket"] = true, ["howitzer"] = true,},
+         ["shotgun"] = { ["mortar"] = true, ["mortar2"] = true, ["missile"] = true, ["missile2"] = true, ["rocketemp"] = true, ["rocket"] = true, ["howitzer"] = true, },
+         ["cannon"] = { ["howitzer"] = true, },
+         ["cannon20mm"] = { ["howitzer"] = true, },
+      }
+   end
  
    DiscoverOriginalNodes()
  
