@@ -131,6 +131,7 @@ function LogTables(Table,IndentLevel)
  data.AntiAirReactionTimeMax = 0.05
  data.DoorCloseDelayMin = 0
  data.DoorCloseDelayMax = 0.05
+ data.DoorOpenDelayDefault = 0.1
  --data.DoorCloseDelayMax = 6
  data.NoTargetCloseDoorDelay = 0.1
  data.GroupDoorOpenDelay = 0.1
@@ -309,6 +310,12 @@ function LogTables(Table,IndentLevel)
      ["howitzer"] = 0.3,
     ["laser"] = 0.5,
  }
+ 
+data.OpenDoorDelay = 
+{
+    ["rocket"] = 0.2,
+    ["rocketemp"] = 0.2,
+}
  
  WeaponFiresLobbedProjectile =
  {
@@ -2399,7 +2406,7 @@ function OnDeviceCompleted(ODCteamId, deviceId, saveName)
                     --Log("HIT DOOR, RECALLING FUNCTION WITH " .. currentTarget)
                     --Log("delay: " .. data.GroupDoorOpenDelay .. " " .. gid .. " " .. index)
                     --BetterLog(group)
-                     ScheduleCall(data.GroupDoorOpenDelay, TryFireGun, id, nil, index,currentTarget, true)
+                    ScheduleCall(data.OpenDoorDelay[type] or data.DoorOpenDelayDefault, TryFireGun, id, nil, index,currentTarget, true)
                  else
                      --LogError(FIRE[result] .. ": close doors after failure")
                      --Log("Fire failed, closing doors")
