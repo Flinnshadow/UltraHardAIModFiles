@@ -139,7 +139,9 @@ data.MissileDoorFireDelay = 0.1
 data.RepairPeriod = 0.2
 --data.ReplaceDeviceDelayMin = 0
 --data.ReplaceDeviceDelayMax = 0.05 Hard coded
-data.MissileAimingDelay = 0
+
+-- to give spotters time to open their doors
+data.MissileAimingDelay = 0.4
 data.FireStdDevDefault = 0
 data.DisableFrustration = true
 
@@ -2599,6 +2601,92 @@ end
 
 -- Fix nuke firing
 data.GroupingAffinity["missile2"]["alone"] = 1
+function LaunchMissile(group, currentTarget, spotterId)
+   local msg = "Launch Missile"
+   for k,id in ipairs(group) do
+      msg = msg .. " " .. id
+   end
+   LogFunction(msg)
+
+   local doorBlock = false
+
+   for k = #group,1,-1 do
+      local id = group[k]
+      LogDetail("LaunchMissile: testing group member " .. id)
+      if not DeviceExists(id) then
+         table.remove(group, k)
+         data.MissileLaunching[id] = nil
+         LogDetail("LaunchMissile: member missing")
+      elseif not OpenAllWeaponDoors(id, currentTarget) then
+         LogDetail("LaunchMissile: door of " .. id .. " is now opening")
+         doorBlock = true
+      end
+   end
+
+   if #group > 0 then
+      if doorBlock then
+         LogDetail("LaunchMissile: waiting for all doors to open")
+         ScheduleCall(data.MissileDoorFireDelay, LaunchMissile, group, currentTarget, spotterId)
+         return
+      end
+
+      for k = #group,1,-1 do
+         local id = group[k]
+         LogEnum("testing missile: " .. id)
+         if not IsAIDeviceAvailable(id) then
+            LogDetail("LaunchMissile: " .. id .. " not available")
+            data.MissileLaunching[id] = nil
+            table.remove(group, k)
+         elseif GetWeaponPaintTargetMarked(id) then
+            LogDetail("LaunchMissile: " .. id .. " paint target marked")			
+            --local result = FireWeapon(id, currentTarget, 0, FIREFLAG_TERRAINBLOCKS | FIREFLAG_EXTRACLEARANCE)
+            local result = FireWeaponHandler(id, GetDeviceType(id), currentTarget, 0, FIREFLAG_TERRAINBLOCKS | FIREFLAG_EXTRACLEARANCE)
+            if result == FIRE_SUCCESS then
+               LogDetail("Fired weapon " .. id .. " of type " .. GetDeviceType(id))
+               -- close door in a little delay
+               ScheduleCall(7.9, MissileLaunchEnded, id)
+               ScheduleCall(8, TryCloseWeaponDoors, id)
+            else
+               LogError(FIRE[result] .. ": LaunchMissile " .. id)
+               data.MissileLaunching[id] = nil
+               TryCloseWeaponDoors(id)
+            end
+         else
+            -- target not marked
+            if DeviceExists(spotterId) then
+               -- likely because doors haven't opened far enough yet, try again in a bit
+               ScheduleCall(data.MissileAimingDelay, LaunchMissile, group, currentTarget, spotterId)
+               return
+            else
+               data.MissileLaunching[id] = nil
+               TryCloseWeaponDoors(id)
+            end
+         end
+         LogDetail("ClearWeaponPaintTarget " .. id)
+         ClearWeaponPaintTarget(id)
+      end
+   end
+
+   LogDetail("LaunchMissile: cleaning up")
+   data.SpotterInUse[spotterId] = nil
+   TryCloseWeaponDoors(spotterId)
+end
+
+function OpenAllWeaponDoors(id, target)
+   -- necessary to aim the weapon for deterministic door opening
+   FireWeapon(id, Vec3FromTable(target), 0, FIREFLAG_TEST | FIREFLAG_DIRECTAIM | FIREFLAG_IGNORERELOADING)
+
+   local result = OpenWeaponDoors(id)
+   LogFunction("OpenAllWeaponDoors " .. id .. " -> " .. SP[result])
+   --[[if result == SP_DOOR then <- removing this because SP_DOOR is returned even if the doors started opening so there's no reason to try again
+      ScheduleCall(2, OpenAllWeaponDoors, id)
+      return false
+   else
+      LogDetail("All doors open")
+      return true
+   end]]
+   return true
+end
 
 -- AI giving up after obstruction fix
 -- TODO (Endo): Consider future-proofing fix; only two lines changed from
