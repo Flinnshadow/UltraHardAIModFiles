@@ -662,6 +662,7 @@ WeaponsCheckedPerIteration = 10
                --end
             end
             table.remove(data.TrackedProjectiles, k)
+            data.TrackedProjectilesDictionary[v.ProjectileNodeId] = nil
          end
       end
 
@@ -1198,6 +1199,20 @@ WeaponsCheckedPerIteration = 10
    end
 end)()
 
+data.TrackedProjectilesDictionary = {}
+function FindTrackedProjectile(id)
+	return data.TrackedProjectilesDictionary[id]
+end
+
+function TrackProjectile(nodeId)
+	local nodeTeamId = NodeTeam(nodeId) -- returns TEAM_ANY if non-existent
+	if nodeTeamId%MAX_SIDES == enemyTeamId then -- node may have changed team since firing
+      v = { ProjectileNodeId = nodeId, AntiAirWeapons = {}, Claims = {} }
+		table.insert(data.TrackedProjectiles, v)
+      data.TrackedProjectilesDictionary[nodeId] = v
+	end
+end
+
 function PredictProjectilePos(projectileId, time)
    local vel = AA_NodeVelocity(projectileId)
    local pos = AA_NodePosition(projectileId)
@@ -1274,6 +1289,45 @@ function PredictProjectilePos(projectileId, time)
    return pos2, vel
 end
 
+function OnProjectilePrediction(pos, vel, timeLeft, referenceId, projTeamId, saveName)
+	if projTeamId%MAX_SIDES == enemyTeamId then
+		--Log(tostring(teamId) .. ": OnProjectilePrediction timeLeft " .. tostring(timeLeft) .. " vel " .. tostring(vel))
+
+		local virtualProj = FindTrackedProjectile(-referenceId)
+		if not virtualProj then
+			-- create a pseudo projectile to trigger anti air at the right time
+			virtualProj = { ProjectileNodeId = -referenceId, AntiAirWeapons = {}, Claims = {} }
+			table.insert(data.TrackedProjectiles, virtualProj)
+         data.TrackedProjectilesDictionary[-referenceId] = virtualProj
+		end
+
+		virtualProj.Pos = pos - timeLeft*vel
+		virtualProj.Vel = vel
+		virtualProj.TimeLeft = timeLeft
+		virtualProj.TeamId = projTeamId
+		virtualProj.SaveName = saveName
+		virtualProj.IsVirtual = true
+
+		if ShowVirtualProjectiles then
+			SpawnCircle(virtualProj.Pos, 50, Red(), 0.04)
+			SpawnLine(virtualProj.Pos, virtualProj.Pos + 1*vel, Red(), 0.04)
+		end
+	end
+end
+
+function OnProjectilePredictionEnd(referenceId, projTeamId)
+	--Log("OnProjectilePredictionEnd " .. referenceId .. ", " .. projTeamId)
+	if projTeamId%MAX_SIDES == enemyTeamId then
+		for k,v in ipairs(data.TrackedProjectiles) do
+			if v.ProjectileNodeId == -referenceId then
+				table.remove(data.TrackedProjectiles, k)
+            data.TrackedProjectilesDictionary[-referenceId] = nil
+				return
+			end
+		end
+	end
+end
+
 function OnWeaponFired(weaponTeamId, saveName, weaponId, projectileNodeId, projectileNodeIdFrom)
    if data.gameWinner and data.gameWinner ~= teamId then return end
 
@@ -1291,13 +1345,6 @@ function OnWeaponFired(weaponTeamId, saveName, weaponId, projectileNodeId, proje
             ScheduleCall(0.5, BuildIntoSmoke, projectileNodeId, 4)
         end
     end]]
-end
-
-function TrackProjectile(nodeId)
-   --local nodeTeamId = NodeTeam(nodeId) -- returns TEAM_ANY if non-existent
-   --if nodeTeamId%MAX_SIDES == enemyTeamId then -- node may have changed team since firing
-   table.insert(data.TrackedProjectiles, { ProjectileNodeId = nodeId, AntiAirWeapons = {}, Claims = {} })
-   --end
 end
 
 function CheckProjectileHit(nodeId)
