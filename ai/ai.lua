@@ -636,6 +636,58 @@ function IsSlowFiringAntiAir(id)
    --return GetWeaponReloadPeriodById(id) > 2*data.AntiAirPeriod
 end
 
+-- data.WeaponCache[id] = { type = "", fieldsBlockFiring = false, isFullyBuilt = false }
+data.WeaponCache = {}
+function CacheWeapon(id, type, fieldsBlockFiring, isFullyBuilt)
+   data.WeaponCache[id] = {
+      type = type or GetDeviceType(id),
+      fieldsBlockFiring = fieldsBlockFiring or GetWeaponFieldsBlockFiring(id),
+      isFullyBuilt = isFullyBuilt or IsDeviceFullyBuilt(id)
+   }
+end
+
+-- data.WeaponTypeParams["saveName"] = { speed = 0, fireDelay = 0, roundsEachBurst = 0, roundsPeriod = 0 }
+data.WeaponTypeParams = {}
+function AddWeaponTypeParam(saveName, speed, fireDelay, roundsEachBurst, roundsPeriod)
+   data.WeaponTypeParams[saveName] = {
+      speed = speed or GetWeaponTypeProjectileSpeed(saveName),
+      fireDelay = fireDelay or GetWeaponTypeFireDelay(saveName, teamId),
+      roundsEachBurst = roundsEachBurst or GetWeaponTypeRoundsEachBurst(saveName, teamId),
+      roundsPeriod = roundsPeriod or GetWeaponTypeRoundsPeriod(saveName, teamId)
+   }
+end
+
+-- data.ProjectileParams["saveName"] = { gravity = 0, mass = 0, drag = 0, speed = 0, rocketThrustChange = 0, rocketThrust = 0 }
+data.ProjectileParams = {}
+function AddProjectileParam(saveName, gravity, mass, drag, speed, rocketThrustChange, rocketThrust)
+   data.ProjectileParams[saveName] = {
+      gravity = gravity or GetProjectileTypeGravity(saveName, teamId),
+      mass = mass or GetProjectileParamFloat(saveName, teamId, "ProjectileMass", 0),
+      drag = drag or GetProjectileTypeDrag(saveName, teamId),
+      speed = speed or GetWeaponTypeProjectileSpeed(saveName),
+      rocketThrustChange = rocketThrustChange or GetProjectileParamFloat(saveName, teamId, "RocketThrustChange", 0),
+      rocketThrust = rocketThrust or GetProjectileParamFloat(saveName, teamId, "RocketThrust", 0)
+   }
+end
+
+data.TrackedProjectilesDictionary = {}
+function FindTrackedProjectile(id)
+   return data.TrackedProjectilesDictionary[id]
+end
+
+function TrackProjectile(nodeId)
+   LogToFileDebug("TrackProjectile called " .. nodeId)
+   local nodeTeamId = NodeTeam(nodeId)           -- returns TEAM_ANY if non-existent
+   if nodeTeamId % MAX_SIDES == enemyTeamId then -- node may have changed team since firing
+      v = { ProjectileNodeId = nodeId, AntiAirWeapons = {}, Claims = {} }
+      v.SaveName = GetNodeProjectileSaveName(nodeId)
+      v.Type = GetNodeProjectileType(nodeId)
+      v.TeamId = nodeTeamId
+      table.insert(data.TrackedProjectiles, v)
+      data.TrackedProjectilesDictionary[nodeId] = v
+   end
+end
+
 WeaponsCheckedPerIteration = 10
 
 (function()
@@ -679,16 +731,24 @@ WeaponsCheckedPerIteration = 10
                 RAY_EXTRA_CLEARANCE
             for index = data.NextAntiAirIndex, weaponCount - 1 do
                local id = GetAntiAirWeaponId(index)
-               local type = GetDeviceType(id)
+               if not data.WeaponCache[id] then
+                  CacheWeapon(id)
+               end
+               local type = data.WeaponCache[id].type
+               if not data.WeaponTypeParams[type] then
+                  AddWeaponTypeParam(type)
+               end
                local weaponPos = GetWeaponBarrelPosition(id)
-               local speed = AntiAirFireSpeed[type] or GetWeaponTypeProjectileSpeed(type)
-               local antiAirFireProb = 1 --data.AntiAirFireProbability[type]
-               --[[local weaponOverride = data.AntiAirWeaponOverride[id]
+               local weaponForward = GetDeviceForward(id)
+               local speed = AntiAirFireSpeed[type] or data.WeaponTypeParams[type].speed
+               local selectedAmmo = GetWeaponSelectedAmmo(id)
+               --[[local antiAirFireProb = 1 --data.AntiAirFireProbability[type]
+               local weaponOverride = data.AntiAirWeaponOverride[id]
                   if weaponOverride then
                      antiAirFireProb = weaponOverride
                   end]]
                local fieldBlockFlags = 0
-               if GetWeaponFieldsBlockFiring(id) then
+               if data.WeaponCache[id].fieldsBlockFiring then
                   fieldBlockFlags = FIELD_BLOCK_FIRING
                end
 
@@ -697,8 +757,8 @@ WeaponsCheckedPerIteration = 10
                   range = AntiAirFireLeadTimeMin[type] * speed
                end
 
-               if antiAirFireProb and not data.AntiAirLockDown[id] and IsDeviceFullyBuilt(id) --[[and IsDeviceAvailable(id) and not IsDummy(id)]]
-                   and (GetRandomFloat(0, 1, "TryShootDownProjectiles FireProb " .. id) < antiAirFireProb) then
+               if --[[antiAirFireProb and]] not data.AntiAirLockDown[id] and data.WeaponCache[id].isFullyBuilt --[[and IsDeviceAvailable(id) and not IsDummy(id)]]
+               --[[and (GetRandomFloat(0, 1, "TryShootDownProjectiles FireProb " .. id) < antiAirFireProb)]] then
                   --LogEnum("AntiAir " .. id .. " type " .. type)
 
                   local dangerOfImpact = false
@@ -715,8 +775,11 @@ WeaponsCheckedPerIteration = 10
                      end
 
                      local projectileId = v.ProjectileNodeId
-                     local projectileType = AA_GetNodeProjectileType(v.ProjectileNodeId)
-                     local projectileSaveName = AA_GetNodeProjectileSaveName(v.ProjectileNodeId)
+                     local projectileType = v.Type
+                     local projectileSaveName = v.SaveName
+                     if not data.ProjectileParams[projectileSaveName] then
+                        AddProjectileParam(projectileSaveName)
+                     end
                      local antiAirInclude = data.AntiAirInclude[type]
                      local antiAirExclude = data.AntiAirExclude[type]
 
@@ -729,9 +792,9 @@ WeaponsCheckedPerIteration = 10
                         local delta = weaponPos - pos
 
                         -- calculate the time it will take to get our projectile to the target position
-                        local fireDelay = GetWeaponTypeFireDelay(type, teamId)
-                        local fireRoundsEachBurst = GetWeaponTypeRoundsEachBurst(type, teamId)
-                        local firePeriod = GetWeaponTypeRoundsPeriod(type, teamId)
+                        local fireDelay = data.WeaponTypeParams[type].fireDelay
+                        local fireRoundsEachBurst = data.WeaponTypeParams[type].roundsEachBurst
+                        local firePeriod = data.WeaponTypeParams[type].roundsPeriod
                         local leadTime = fireDelay + 0.25 * (fireRoundsEachBurst - 1) * firePeriod
 
                         local d = Vec3Length(delta)
@@ -741,13 +804,16 @@ WeaponsCheckedPerIteration = 10
 
                         -- modified --
                         if projectileSaveName ~= "missile" then
-                           local weaponProjSaveName = GetWeaponSelectedAmmo(id)
-                           local m = GetProjectileParamFloat(weaponProjSaveName, teamId, "ProjectileMass", 0)
-                           local g = GetProjectileTypeGravity(weaponProjSaveName, teamId)
+                           local weaponProjSaveName = selectedAmmo
+                           if not data.ProjectileParams[weaponProjSaveName] then
+                              AddProjectileParam(weaponProjSaveName)
+                           end
+                           local m = data.ProjectileParams[weaponProjSaveName].mass
+                           local g = data.ProjectileParams[weaponProjSaveName].gravity
                            if g == 0 then g = 0.00001 end
-                           local b = GetProjectileTypeDrag(weaponProjSaveName, teamId)
+                           local b = data.ProjectileParams[weaponProjSaveName].drag
                            if b == 0 then b = 0.00001 end
-                           local vel = GetWeaponTypeProjectileSpeed(weaponProjSaveName)
+                           local vel = data.ProjectileParams[weaponProjSaveName].speed
 
                            -- Log(tostring(m) .. " " .. tostring(g) .. " " .. tostring(b) .. " " .. tostring(vel))
 
@@ -835,7 +901,6 @@ WeaponsCheckedPerIteration = 10
                         -- ignore projectile if it's too close to shoot at
                         if (timeToImpact < closestTimeToImpact or timeToSelf < minTimeToImpact) then
                            -- don't fire at projectiles that are behind the weapon
-                           local weaponForward = GetDeviceForward(id)
                            local dot = Vec3Dot(weaponForward, deltaUnit)
                            if dot < 0 then
                               local rayHit = CastRayFromDevice(id, pos, 1, rayFlags, fieldBlockFlags)
@@ -845,7 +910,7 @@ WeaponsCheckedPerIteration = 10
 
                               local trajectoryThreat = lineOfSight and incomingAngle < 15
                               if lineOfSight then -- and projectileType == PROJECTILE_TYPE_MORTAR then
-                                 local g = AA_GetProjectileGravity(projectileId)
+                                 local g = data.ProjectileParams[projectileSaveName].gravity
                                  if g == 0 or projectileType == PROJECTILE_TYPE_MISSILE then g = 0.00001 end
                                  local a = 0.5 * g / (currVel.x * currVel.x)
                                  local dydx = currVel.y / currVel.x;
@@ -992,8 +1057,8 @@ WeaponsCheckedPerIteration = 10
                      local timeToImpact = closestTimeToImpact
                      --LogEnum("Targeting projectile " .. v.ProjectileNodeId .. " with time to impact " .. closestTimeToImpact)
 
-                     local projectileSaveName = AA_GetNodeProjectileSaveName(v.ProjectileNodeId)
-                     local projectileType = AA_GetNodeProjectileType(v.ProjectileNodeId)
+                     local projectileSaveName = v.SaveName
+                     local projectileType = v.Type
                      local blocked = false
 
                      if timeToImpact < maxUncertainty then
@@ -1061,14 +1126,14 @@ WeaponsCheckedPerIteration = 10
                      end
 
                      if not blocked then
-                        local projSaveName = GetWeaponSelectedAmmo(id)
-                        local projParams = GetProjectileParams(projSaveName, teamId)
+                        local projSaveName = selectedAmmo
+                        --local projParams = GetProjectileParams(projSaveName, teamId)
 
                         --[[if hasbit(projParams.FieldType, FIELD2_DECOY_ENEMY_BIT) then
                                  pos = AimDecoyAtEnemy(pos, id, projParams, fieldBlockFlags)
                               end]]
 
-                        local stdDev = data.AntiAirErrorStdDev[type]
+                        --local stdDev = data.AntiAirErrorStdDev[type]
                         --LogDetail("Shooting down projectile " .. v.ProjectileNodeId .. " weapon " .. id)
 
 
@@ -1076,20 +1141,20 @@ WeaponsCheckedPerIteration = 10
                         -- SpawnCircle(pos, 10, Red(), 10)
 
                         local projectileId = v.ProjectileNodeId
-                        local projectileSaveName = AA_GetNodeProjectileSaveName(projectileId)
+                        local projectileSaveName = v.SaveName
 
                         -- correction for projectiles with air resistance
-                        local b = GetProjectileTypeDrag(projSaveName, teamId)
+                        local b = data.ProjectileParams[projectileSaveName].drag
                         if b > 0 and projectileSaveName ~= "missile" and timeToImpact < math.huge then
                            -- Log(tostring(timeToImpact))
 
                            local posA = AA_NodePosition(projectileId)
                            local delta = weaponPos - posA
 
-                           local m = GetProjectileParamFloat(projSaveName, teamId, "ProjectileMass", 0)
-                           local g = GetProjectileTypeGravity(projSaveName, teamId)
+                           local m = data.ProjectileParams[projectileSaveName].mass
+                           local g = data.ProjectileParams[projectileSaveName].gravity
                            if g == 0 then g = 0.00001 end
-                           local vel = GetWeaponTypeProjectileSpeed(projSaveName)
+                           local vel = data.ProjectileParams[projectileSaveName].speed
 
                            -- Log(tostring(m) .. " " .. tostring(g) .. " " .. tostring(b) .. " " .. tostring(vel))
 
@@ -1186,9 +1251,7 @@ WeaponsCheckedPerIteration = 10
                end
 
                data.NextAntiAirIndex = index + 1
-               --Log("".. data.NextAntiAirIndex)
                if data.NextAntiAirIndex % WeaponsCheckedPerIteration == 0 then
-                  --Log("" .. data.NextAntiAirIndex .. " ending loop")
                   break
                end
             end
@@ -1199,42 +1262,34 @@ WeaponsCheckedPerIteration = 10
    end
 end)()
 
-data.TrackedProjectilesDictionary = {}
-function FindTrackedProjectile(id)
-	return data.TrackedProjectilesDictionary[id]
-end
-
-function TrackProjectile(nodeId)
-	local nodeTeamId = NodeTeam(nodeId) -- returns TEAM_ANY if non-existent
-	if nodeTeamId%MAX_SIDES == enemyTeamId then -- node may have changed team since firing
-      v = { ProjectileNodeId = nodeId, AntiAirWeapons = {}, Claims = {} }
-		table.insert(data.TrackedProjectiles, v)
-      data.TrackedProjectilesDictionary[nodeId] = v
-	end
-end
-
 function PredictProjectilePos(projectileId, time)
    local vel = AA_NodeVelocity(projectileId)
    local pos = AA_NodePosition(projectileId)
 
-   if AA_GetNodeProjectileType(projectileId) == PROJECTILE_TYPE_MISSILE then
-      -- modified --
-      local saveName = AA_GetNodeProjectileSaveName(projectileId)
-      local teamId = AA_NodeTeam(projectileId)
+   local v = FindTrackedProjectile(projectileId)
 
-      local thrustChange = GetProjectileParamFloat(saveName, teamId, "Missile.RocketThrustChange", 0)
-      local thrust = GetProjectileParamFloat(saveName, teamId, "Missile.RocketThrust", 0) +
+   if v.Type == PROJECTILE_TYPE_MISSILE then
+      -- modified --
+      local saveName = v.SaveName
+      local teamId = v.TeamId
+
+      if not data.ProjectileParams[saveName] then
+         AddProjectileParam(saveName)
+      end
+
+      local thrustChange = data.ProjectileParams[saveName].rocketThrustChange
+      local thrust = data.ProjectileParams[saveName].rocketThrust +
           thrustChange * GetNodeAge(projectileId)
 
       local speed = Vec3Length(vel)
-      local target = AA_GetProjectileTarget(projectileId)
+      local target = v.Target
       local direction = target - pos
       Vec3Unit(direction)
       vel = speed * direction
 
       if thrust > 0 and thrustChange > 0 then
-         local mass = GetProjectileParamFloat(saveName, teamId, "ProjectileMass", 0)
-         local drag = GetProjectileTypeDrag(saveName, teamId)
+         local mass = data.ProjectileParams[saveName].mass
+         local drag = data.ProjectileParams[saveName].drag
          if drag == 0 then drag = 0.00001 end
 
          -- jerk and drag correction term added
@@ -1254,7 +1309,7 @@ function PredictProjectilePos(projectileId, time)
       return pos + time * vel, vel
    end
 
-   local g = AA_GetProjectileGravity(projectileId)
+   local g = data.ProjectileParams[v.SaveName].gravity
    if g == 0 then g = 0.00001 end
    local a = 0.5 * g / (vel.x * vel.x)
    local dydx = vel.y / vel.x;
@@ -1265,7 +1320,7 @@ function PredictProjectilePos(projectileId, time)
    local y = 0
    --local b = dydx - 2*a*x
    local b = dydx - 2 * a * x
-   local c = y - (a * x * x + b * x)
+   --local c = y - (a * x * x + b * x)
 
    local pos2 = Vec3()
    pos2.x = pos.x + deltaX
@@ -1663,6 +1718,7 @@ end
 
 function RemoveDeviceFromTeamWeapons(id, saveName)
    if IsWeapon(id) then
+      data.WeaponCache[id] = nil
       for i = 1, #data.TeamWeapons[saveName] do
          if data.TeamWeapons[saveName][i] == id then
             table.remove(data.TeamWeapons[saveName], i)
@@ -1694,6 +1750,9 @@ end
 function OnDeviceCompleted(ODCteamId, deviceId, saveName)
    if ODCteamId == teamId then
       AddDeviceToTeamWeapons(deviceId, saveName)
+      if data.WeaponCache[deviceId] then
+         data.WeaponCache[deviceId].isFullyBuilt = true
+      end
    end
 end
 
