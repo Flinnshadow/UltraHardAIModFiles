@@ -1266,15 +1266,16 @@ function PredictProjectilePos(projectileId, time)
    local pos = AA_NodePosition(projectileId)
 
    local v = FindTrackedProjectile(projectileId)
+   local saveName = v.SaveName
+   
+   if not data.ProjectileParams[saveName] then
+      AddProjectileParam(saveName)
+   end
 
    if v.Type == PROJECTILE_TYPE_MISSILE then
       -- modified --
-      local saveName = v.SaveName
       local teamId = v.TeamId
 
-      if not data.ProjectileParams[saveName] then
-         AddProjectileParam(saveName)
-      end
 
       local thrustChange = data.ProjectileParams[saveName].rocketThrustChange
       local thrust = data.ProjectileParams[saveName].rocketThrust +
@@ -1308,7 +1309,7 @@ function PredictProjectilePos(projectileId, time)
       return pos + time * vel, vel
    end
 
-   local g = data.ProjectileParams[v.SaveName].gravity
+   local g = data.ProjectileParams[saveName].gravity
    if g == 0 then g = 0.00001 end
    local a = 0.5 * g / (vel.x * vel.x)
    local dydx = vel.y / vel.x;
