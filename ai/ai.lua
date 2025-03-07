@@ -676,7 +676,6 @@ function FindTrackedProjectile(id)
 end
 
 function TrackProjectile(nodeId)
-   LogToFileDebug("TrackProjectile called " .. nodeId)
    local nodeTeamId = NodeTeam(nodeId)           -- returns TEAM_ANY if non-existent
    if nodeTeamId % MAX_SIDES == enemyTeamId then -- node may have changed team since firing
       v = { ProjectileNodeId = nodeId, AntiAirWeapons = {}, Claims = {} }
