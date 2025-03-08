@@ -2911,7 +2911,8 @@ function ExecuteFortAction(action, index)
             else
                actualNodeB = nil
                LogError("CreateNode failed: " .. CS[newNodeId] .. " from actual N" .. actualNodeA)
-               if newNodeId == CS_NODESTOOCLOSE or newNodeId == CS_NOGROUND or newNodeId == CS_NODESTOOFAR and Vec3Dist(NodePosition(actualNodeA), dest) < GetMaterialMaxLength(action.MaterialSaveName, teamId) + LinkStretch then
+               --if newNodeId == CS_NODESTOOCLOSE or newNodeId == CS_NOGROUND or newNodeId == CS_NODESTOOFAR and Vec3Dist(NodePosition(actualNodeA), dest) < GetMaterialMaxLength(action.MaterialSaveName, teamId) + LinkStretch then
+               if newNodeId == CS_NODESTOOFAR or newNodeId == CS_NODESTOOCLOSE or newNodeId == CS_NOGROUND then
                   return CreateNodeDynamic(newNodeId, action, actualNodeA, dest, index)
                else
                   if ShowPositions then
