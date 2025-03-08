@@ -1282,6 +1282,9 @@ function PredictProjectilePos(projectileId, time)
           thrustChange * GetNodeAge(projectileId)
 
       local speed = Vec3Length(vel)
+      if not v.Target then
+         v.Target = AA_GetProjectileTarget(projectileId)
+      end
       local target = v.Target
       local direction = target - pos
       Vec3Unit(direction)
