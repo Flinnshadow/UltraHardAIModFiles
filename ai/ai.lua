@@ -657,14 +657,13 @@ function AddWeaponTypeParam(saveName, speed, fireDelay, roundsEachBurst, roundsP
    }
 end
 
--- data.ProjectileParams["saveName"] = { gravity = 0, mass = 0, drag = 0, speed = 0, rocketThrustChange = 0, rocketThrust = 0 }
+-- data.ProjectileParams["saveName"] = { gravity = 0, mass = 0, drag = 0, rocketThrustChange = 0, rocketThrust = 0 }
 data.ProjectileParams = {}
 function AddProjectileParam(saveName, gravity, mass, drag, speed, rocketThrustChange, rocketThrust)
    data.ProjectileParams[saveName] = {
       gravity = gravity or GetProjectileTypeGravity(saveName, teamId),
       mass = mass or GetProjectileParamFloat(saveName, teamId, "ProjectileMass", 0),
       drag = drag or GetProjectileTypeDrag(saveName, teamId),
-      speed = speed or GetWeaponTypeProjectileSpeed(saveName),
       rocketThrustChange = rocketThrustChange or GetProjectileParamFloat(saveName, teamId, "RocketThrustChange", 0),
       rocketThrust = rocketThrust or GetProjectileParamFloat(saveName, teamId, "RocketThrust", 0)
    }
@@ -812,7 +811,7 @@ WeaponsCheckedPerIteration = 10
                            if g == 0 then g = 0.00001 end
                            local b = data.ProjectileParams[weaponProjSaveName].drag
                            if b == 0 then b = 0.00001 end
-                           local vel = data.ProjectileParams[weaponProjSaveName].speed
+                           local vel = data.WeaponTypeParams[type].speed
 
                            -- Log(tostring(m) .. " " .. tostring(g) .. " " .. tostring(b) .. " " .. tostring(vel))
 
@@ -1143,17 +1142,17 @@ WeaponsCheckedPerIteration = 10
                         local projectileSaveName = v.SaveName
 
                         -- correction for projectiles with air resistance
-                        local b = data.ProjectileParams[projectileSaveName].drag
+                        local b = data.ProjectileParams[projSaveName].drag
                         if b > 0 and projectileSaveName ~= "missile" and timeToImpact < math.huge then
                            -- Log(tostring(timeToImpact))
 
                            local posA = AA_NodePosition(projectileId)
                            local delta = weaponPos - posA
 
-                           local m = data.ProjectileParams[projectileSaveName].mass
-                           local g = data.ProjectileParams[projectileSaveName].gravity
+                           local m = data.ProjectileParams[projSaveName].mass
+                           local g = data.ProjectileParams[projSaveName].gravity
                            if g == 0 then g = 0.00001 end
-                           local vel = data.ProjectileParams[projectileSaveName].speed
+                           local vel = data.WeaponTypeParams[type].speed
 
                            -- Log(tostring(m) .. " " .. tostring(g) .. " " .. tostring(b) .. " " .. tostring(vel))
 
