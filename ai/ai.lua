@@ -112,6 +112,23 @@ local function GetRandomDigits(count)
   return randomValue * 10
 end
 
+--[[
+function tmemoize(func)
+    return setmetatable({}, {
+        __index = function(self, k)
+            local v = func(k);
+            self[k] = v
+            return v;
+        end
+    });
+end
+-- usage (does not support nil values!)
+local mf = tmemoize(myfunc);
+local v  = mf[x];
+]]
+
+--TODO: 
+
 offensivePhase = true -- The difficulty is always enough to enable this
 data.UpdatePeriod = 0.2
 data.UpdateWeaponsPeriod = 0.08
@@ -765,7 +782,7 @@ WeaponsCheckedPerIteration = 10
             local best_t = nil
             local best_pos = nil
             local best_vel = nil
-            for k, v in ipairs(data.TrackedProjectiles) do
+            for k, v in ipairs(data.TrackedProjectiles) do -- for k=1, #tbl do local v = tbl[k];
               --Log("Evaluating projectile " .. v.ProjectileNodeId)
 
               if v.IsVirtual and (data.AntiAirFiresAtVirtualWithin[type] == nil or v.TimeLeft > data.AntiAirFiresAtVirtualWithin[type]) then
@@ -1147,7 +1164,7 @@ WeaponsCheckedPerIteration = 10
                   -- Log(tostring(timeToImpact))
 
                   local posA = AA_NodePosition(projectileId)
-                  local delta = weaponPos - posA
+                  local delta = weaponPos - posA --TODO: Unused, remove it not needed
 
                   local m = data.ProjectileParams[projSaveName].mass
                   local g = data.ProjectileParams[projSaveName].gravity
@@ -1218,7 +1235,7 @@ WeaponsCheckedPerIteration = 10
                     if type == "machinegun" then delay = timeToImpact / 2 end
                     ScheduleCall(delay, CheckProjectileHit, projectileId)
                   end
-                  InsertUnique(v.AntiAirWeapons, id)
+                  v.AntiAirWeapons[id] = true--InsertUnique(v.AntiAirWeapons, id)
                   data.NextAntiAirIndex = index + 1
 
 
@@ -1231,7 +1248,7 @@ WeaponsCheckedPerIteration = 10
                     -- door will be opening, will try again soon
 
                     -- remember to close doors that were opened but didn't have an opportunity to close
-                    InsertUnique(v.AntiAirWeapons, id)
+                    v.AntiAirWeapons[id] = true--InsertUnique(v.AntiAirWeapons, id)
                   end
                   --LogDetail(FIRE[result])
                 end
@@ -1273,8 +1290,6 @@ function PredictProjectilePos(projectileId, time)
 
   if v.Type == PROJECTILE_TYPE_MISSILE then
     -- modified --
-    local teamId = v.TeamId
-
 
     local thrustChange = data.ProjectileParams[saveName].rocketThrustChange
     local thrust = data.ProjectileParams[saveName].rocketThrust +
@@ -1348,7 +1363,6 @@ end
 
 function OnProjectilePrediction(pos, vel, timeLeft, referenceId, projTeamId, saveName)
   if projTeamId % MAX_SIDES == enemyTeamId then
-    --Log(tostring(teamId) .. ": OnProjectilePrediction timeLeft " .. tostring(timeLeft) .. " vel " .. tostring(vel))
 
     local virtualProj = FindTrackedProjectile(-referenceId)
     if not virtualProj then
@@ -1373,11 +1387,13 @@ function OnProjectilePrediction(pos, vel, timeLeft, referenceId, projTeamId, sav
 end
 
 function OnProjectilePredictionEnd(referenceId, projTeamId)
-  --Log("OnProjectilePredictionEnd " .. referenceId .. ", " .. projTeamId)
+
   if projTeamId % MAX_SIDES == enemyTeamId then
     for k, v in ipairs(data.TrackedProjectiles) do
       if v.ProjectileNodeId == -referenceId then
         table.remove(data.TrackedProjectiles, k)
+        --local x = foo[#foo]; TODO: replace any table.remove/insert foo[#foo+1] = bar;
+        --foo[#foo] = nil
         data.TrackedProjectilesDictionary[-referenceId] = nil
         return
       end
@@ -2700,56 +2716,118 @@ function round(num, numDecimalPlaces)
   return tonumber(string.format("%." .. (numDecimalPlaces or 0) .. "f", num))
 end
 
+data.SpotterInUse = {}
+data.MissileLaunching = {}
+
+function PaintTarget(group, paintTarget)
+
+
+	local weaponCount = GetWeaponCount(teamId)
+	local availableSpotters = {}
+	for index = 0,weaponCount - 1 do
+		local spotterId = GetWeaponId(teamId, index)
+		local spotterType = GetDeviceType(spotterId)
+		if IsSpotter(spotterType, teamId)
+			and not IsDummy(spotterId)
+			and IsDeviceFullyBuilt(spotterId)
+			and not data.SpotterInUse[spotterId]
+			and not IsWeaponSpotting(spotterId)
+			and IsAIDeviceAvailable(spotterId) then
+			table.insert(availableSpotters, spotterId)
+		end
+	end
+
+	while true do
+		if #availableSpotters == 0 then
+			return -- no spotters available, bail
+		end
+
+		-- randomly select a spotter
+		local spotterIndex = GetRandomInteger(1,#availableSpotters,"PaintTarget")
+		local spotterId = availableSpotters[spotterIndex]
+
+		-- cast ray from sniper to target - hit anything except terrain & nothing, get position of surface
+		local rayFlags = RAY_EXCLUDE_CONSTRUCTION | RAY_NEUTRAL_BLOCKS | RAY_PORTAL_BLOCKS
+		local hitType = CastRayFromDevice(spotterId, paintTarget, 0, rayFlags, 0)
+		LogDetail("Selecting spotter " .. spotterId .. " hit type " .. tostring(hitType))
+
+		if hitType ~= RAY_HIT_NOTHING and hitType ~= RAY_HIT_TERRAIN and GetRayHitTeamId()%MAX_SIDES == enemyTeamId then
+			local raySource = GetDeviceCentrePosition(spotterId)
+			local paintedTarget = GetRayHitPosition()
+			LogDetail("Spotter hit target at " .. paintedTarget.x .. ", " .. paintedTarget.y)
+			local rayDelta = Vec3((paintedTarget.x - raySource.x)/1000, (paintedTarget.y - raySource.y)/1000, 0)
+			local paintedTarget = Vec3(paintedTarget.x - rayDelta.x, paintedTarget.y - rayDelta.y, paintedTarget.z - rayDelta.z)
+			LogDetail("Spotter target " .. paintedTarget.x .. ", " .. paintedTarget.y)
+			
+			-- open doors for spotter
+			OpenAllWeaponDoors(spotterId, paintedTarget)
+			
+			-- prevent it being used for shooting
+			data.SpotterInUse[spotterId] = true
+			
+			-- set AI aim target for missile launcher(s)
+			for k,id in ipairs(group) do
+				data.MissileLaunching[id] = true
+				SetWeaponPaintTarget(id, paintedTarget)
+			end
+
+			-- wait, check if game has marked the target (could be with a different sniper)
+			-- then launch missile at target
+			ScheduleCall(data.MissileAimingDelay, LaunchMissile, group, paintedTarget, spotterId)
+			
+			return
+		else
+			-- couldn't get a line of sight to this target with this spotter
+			-- don't try it again
+			table.remove(availableSpotters, spotterIndex)	
+		end
+	end
+end
+
 -- Fix nuke firing
 data.GroupingAffinity["missile2"]["alone"] = 1
 function LaunchMissile(group, currentTarget, spotterId)
-  local msg = "Launch Missile"
-  for k, id in ipairs(group) do
-    msg = msg .. " " .. id
-  end
-  LogFunction(msg)
 
   local doorBlock = false
 
   for k = #group, 1, -1 do
     local id = group[k]
-    LogDetail("LaunchMissile: testing group member " .. id)
+
     if not DeviceExists(id) then
       table.remove(group, k)
       data.MissileLaunching[id] = nil
-      LogDetail("LaunchMissile: member missing")
+
     elseif not OpenAllWeaponDoors(id, currentTarget) then
-      LogDetail("LaunchMissile: door of " .. id .. " is now opening")
+
       doorBlock = true
     end
   end
 
   if #group > 0 then
     if doorBlock then
-      LogDetail("LaunchMissile: waiting for all doors to open")
+
       ScheduleCall(data.MissileDoorFireDelay, LaunchMissile, group, currentTarget, spotterId)
       return
     end
 
     for k = #group, 1, -1 do
       local id = group[k]
-      LogEnum("testing missile: " .. id)
+
       if not IsAIDeviceAvailable(id) then
-        LogDetail("LaunchMissile: " .. id .. " not available")
+
         data.MissileLaunching[id] = nil
         table.remove(group, k)
       elseif GetWeaponPaintTargetMarked(id) then
-        LogDetail("LaunchMissile: " .. id .. " paint target marked")
+
         --local result = FireWeapon(id, currentTarget, 0, FIREFLAG_TERRAINBLOCKS | FIREFLAG_EXTRACLEARANCE)
         local result = FireWeaponHandler(id, GetDeviceType(id), currentTarget, 0,
           FIREFLAG_TERRAINBLOCKS | FIREFLAG_EXTRACLEARANCE)
         if result == FIRE_SUCCESS then
-          LogDetail("Fired weapon " .. id .. " of type " .. GetDeviceType(id))
+
           -- close door in a little delay
           ScheduleCall(7.9, MissileLaunchEnded, id)
           ScheduleCall(8, TryCloseWeaponDoors, id)
         else
-          LogError(FIRE[result] .. ": LaunchMissile " .. id)
           data.MissileLaunching[id] = nil
           TryCloseWeaponDoors(id)
         end
@@ -2764,12 +2842,10 @@ function LaunchMissile(group, currentTarget, spotterId)
           TryCloseWeaponDoors(id)
         end
       end
-      LogDetail("ClearWeaponPaintTarget " .. id)
       ClearWeaponPaintTarget(id)
     end
   end
 
-  LogDetail("LaunchMissile: cleaning up")
   data.SpotterInUse[spotterId] = nil
   TryCloseWeaponDoors(spotterId)
 end
@@ -2779,7 +2855,6 @@ function OpenAllWeaponDoors(id, target)
   FireWeapon(id, Vec3FromTable(target), 0, FIREFLAG_TEST | FIREFLAG_DIRECTAIM | FIREFLAG_IGNORERELOADING)
 
   local result = OpenWeaponDoors(id)
-  LogFunction("OpenAllWeaponDoors " .. id .. " -> " .. SP[result])
   --[[if result == SP_DOOR then <- removing this because SP_DOOR is returned even if the doors started opening so there's no reason to try again
       ScheduleCall(2, OpenAllWeaponDoors, id)
       return false
@@ -2788,6 +2863,37 @@ function OpenAllWeaponDoors(id, target)
       return true
    end]]
   return true
+end
+
+
+function ForgetActualNode(nodeId, rebuildLinks)
+  local ATO = ActualToOriginal
+  local MNFR = MarkNodeForRebuild
+  local MLFR = MarkNodeForRebuild
+
+	if rebuildLinks then
+		-- queue links for Rebuild since there is no-where else that will identify this link as destroyed
+		local originalNodeId = ATO(nodeId)
+		if originalNodeId > 0 then
+			MNFR(originalNodeId)
+
+			local count = NodeNonSegmentedLinkCount(nodeId)
+			for i = 0, count - 1 do
+				local linkedId = NodeLinkedNodeId(nodeId, i)
+				local originalLinkedId = ATO(linkedId)
+
+				if originalLinkedId and originalLinkedId > 0 then
+					--LogDetail("  ForgetActualNode MarkLinkForRebuild ON" .. originalNodeId .. "-ON" .. originalLinkedId)
+					MLFR(originalNodeId, originalLinkedId)
+				end
+			end
+		end
+	end
+
+	local k = ATO(nodeId)
+	if k then
+		ForgetOriginalNode(k)
+	end
 end
 
 -- AI giving up after obstruction fix
@@ -3546,12 +3652,690 @@ end
 
 --LogLower("priorities are being defined.")
 priorities = {
-  ["minigun"] = {
-    { "machinegun",    100, -1 },
-    { "sniper2",       40,  -1 },
-    { "sniper",        20,  -1 },
-    { "repairstation", 5,   -1 },
-  },
+  -- The core is targeted first,
+  -- must be ordered by priority (max(direct, splash)), descending
+  -- {"reactor", 101, 100} is implicitly given in every table unless specified otherwise
+  -- {"savename", 0.1, 0} for every savename in AllTypesOfDevicesAndWeapons, is implicitly given in every table unless specified otherwise
+  -- (-1,_) counts as disabled, (0,-1) will automaticly remove splash calculation from the weapon (if its 0 it will still count as valid, but have 0 priority.)
+
+["machinegun"] = {
+  { "machinegun", 100, -1 },
+},
+
+["minigun"]    = {
+  { "machinegun",    100, -1 },
+  { "turbine2",      99,  -1 },
+  { "mine2",         99,  -1 },
+  { "turbine",       98,  -1 },
+  { "mine",          98,  -1 },
+  { "barrel",        95,  -1 },
+  { "munitions",     92,  -1 },
+  { "factory",       92,  -1 },
+  { "upgrade",       92,  -1 },
+  { "workshop",      91,  -1 },
+  { "armoury",       91,  -1 },
+  { "shotgun",       90,  -1 },
+  { "mortar2",       85,  -1 },
+  { "mortar",        84,  -1 },
+  { "battery2",      82,  -1 },
+  { "battery",       81,  -1 },
+  { "store",         81,  -1 },
+  { "rocketemp",     80,  -1 },
+  { "rocket",        80,  -1 },
+  { "smokebomb",     80,  -1 },
+  { "missile2",      75,  -1 },
+  { "missile2inv",   75,  -1 },
+  { "missile",       70,  -1 },
+  { "missileinv",    70,  -1 },
+  { "howitzer",      65,  -1 },
+  { "cannon",        65,  -1 },
+  { "laser",         65,  -1 },
+  { "cannon20mm",    60,  -1 },
+  { "firebeam",      60,  -1 },
+  { "magnabeam",     60,  -1 },
+  { "buzzsaw",       55,  -1 },
+  { "minigun2",      55,  -1 },
+  { "minigun",       55,  -1 },
+  { "flak",          50,  -1 },
+  { "sniper2",       40,  -1 },
+  { "sniper",        20,  -1 },
+  { "repairstation", 5,   -1 },
+},
+-- ~~same as minigun
+["minigun2"]   = {
+  { "machinegun",    100, -1 },
+  { "turbine2",      99,  -1 },
+  { "mine2",         99,  -1 },
+  { "turbine",       98,  -1 },
+  { "mine",          98,  -1 },
+  { "barrel",        95,  -1 },
+  { "munitions",     92,  -1 },
+  { "factory",       92,  -1 },
+  { "upgrade",       92,  -1 },
+  { "workshop",      91,  -1 },
+  { "armoury",       91,  -1 },
+  { "shotgun",       90,  -1 },
+  { "mortar2",       85,  -1 },
+  { "mortar",        84,  -1 },
+  { "battery2",      82,  -1 },
+  { "battery",       81,  -1 },
+  { "store",         81,  -1 },
+  { "rocketemp",     80,  -1 },
+  { "rocket",        80,  -1 },
+  { "smokebomb",     80,  -1 },
+  { "missile2",      75,  -1 },
+  { "missile2inv",   75,  -1 },
+  { "missile",       70,  -1 },
+  { "missileinv",    70,  -1 },
+  { "howitzer",      65,  -1 },
+  { "cannon",        65,  -1 },
+  { "laser",         65,  -1 },
+  { "cannon20mm",    60,  -1 },
+  { "firebeam",      60,  -1 },
+  { "magnabeam",     60,  -1 },
+  { "buzzsaw",       55,  -1 },
+  { "minigun2",      55,  -1 },
+  { "minigun",       55,  -1 },
+  { "flak",          50,  -1 },
+  { "sniper2",       40,  -1 },
+  { "sniper",        20,  -1 },
+  { "repairstation", 5,   -1 },
+},
+
+
+["sniper"]      = {
+  { "barrel",        100, -1 },
+  { "buzzsaw",       100, -1 },
+  { "cannon20mm",    100, -1 },
+  { "firebeam",      100, -1 },
+  { "rocketemp",     95,  -1 },
+  { "flak",          94,  -1 },
+  { "laser",         90,  -1 },
+  { "sniper2",       85,  -1 },
+  { "cannon",        85,  -1 },
+  { "sniper",        84,  -1 },
+  { "minigun2",      80,  -1 },
+  { "minigun",       80,  -1 },
+  { "rocket",        75,  -1 },
+  { "smokebomb",     75,  -15 },
+  { "shotgun",       75,  -1 },
+  { "missile2",      75,  -1 },
+  { "missile2inv",   75,  -1 },
+  { "missile",       70,  -1 },
+  { "missileinv",    70,  -1 },
+  { "mortar2",       65,  -1 },
+  { "mortar",        64,  -1 },
+  { "machinegun",    60,  -1 },
+  { "magnabeam",     60,  -1 },
+  { "howitzer",      54,  -1 },
+  { "munitions",     51,  -1 },
+  { "factory",       51,  -1 },
+  { "upgrade",       51,  -1 },
+  { "workshop",      50,  -1 },
+  { "armoury",       50,  -1 },
+  { "battery2",      51,  -1 },
+  { "battery",       50,  -1 },
+  { "mine2",         10,  -1 },
+  { "mine",          9,   -1 },
+  { "turbine2",      5,   -1 },
+  { "turbine",       4,   -1 },
+  { "store",         4,   -1 },
+  { "repairstation", 4,   -1 },
+},
+
+["sniper2"]     = {
+  { "barrel",      100, -1 },
+  { "buzzsaw",     100, -1 },
+  { "cannon20mm",  100, -1 },
+  { "firebeam",    100, -1 },
+  { "shotgun",     95,  -1 },
+  { "rocketemp",   95,  -1 },
+  { "flak",        94,  -1 },
+  { "laser",       90,  -1 },
+  { "sniper2",     85,  -1 },
+  { "sniper",      84,  -1 },
+  { "minigun2",    80,  -1 },
+  { "minigun",     80,  -1 },
+  { "rocket",      75,  -1 },
+  { "smokebomb",   75,  -1 },
+  { "missile2",    75,  -1 },
+  { "missile2inv", 75,  -1 },
+  { "missile",     70,  -1 },
+  { "missileinv",  70,  -1 },
+  { "mortar2",     65,  -1 },
+  { "mortar",      64,  -1 },
+  { "machinegun",  60,  -1 },
+  { "magnabeam",   60,  -1 },
+  { "howitzer",    55,  -1 },
+  { "cannon",      55,  -1 },
+  { "munitions",   51,  -1 },
+  { "factory",     51,  -1 },
+  { "upgrade",     51,  -1 },
+  { "workshop",    50,  -1 },
+  { "armoury",     50,  -1 },
+  { "battery2",    31,  -1 },
+  { "battery",     30,  -1 },
+  { "mine2",       20,  -1 },
+  { "store",       5,   -1 },
+},
+
+["mortar"]      = {
+  { "reactor",       101, 170 },
+  { "machinegun",    100, 140 },
+  { "flak",          100, -1 },
+  { "barrel",        100, 90 },
+  { "mortar2",       91,  -1 },
+  { "mortar",        91,  -1 },
+  { "mine2",         90,  -1 },
+  { "turbine2",      85,  -1 },
+  { "turbine",       80,  -1 },
+  { "battery2",      31,  75 },
+  { "battery",       30,  75 },
+  { "cannon",        65,  -1 },
+  { "laser",         65,  -1 },
+  { "cannon20mm",    60,  -1 },
+  { "firebeam",      60,  -1 },
+  { "howitzer",      60,  -1 },
+  { "magnabeam",     60,  -1 },
+  { "missile2",      55,  -1 },
+  { "missile",       55,  -1 },
+  { "mine",          52,  -1 },
+  { "missile2inv",   51,  -1 },
+  { "missileinv",    51,  -1 },
+  { "munitions",     50,  -1 },
+  { "factory",       50,  -1 },
+  { "upgrade",       50,  -1 },
+  { "buzzsaw",       50,  -1 },
+  { "rocketemp",     50,  -1 },
+  { "sniper2",       50,  -1 },
+  { "sniper",        50,  40 },
+  { "minigun2",      50,  -1 },
+  { "minigun",       50,  -1 },
+  { "rocket",        50,  -1 },
+  { "smokebomb",     50,  -1 },
+  { "shotgun",       50,  -1 },
+  { "workshop",      29,  -1 },
+  { "armoury",       29,  -1 },
+  { "store",         29,  -1 },
+  { "repairstation", 5,   -1 },
+},
+
+["mortar2"]     = {
+  { "machinegun",    100, 60 },
+  { "flak",          100, 40 },
+  { "barrel",        100, 70 },
+  { "munitions",     95,  -1 },
+  { "factory",       95,  -1 },
+  { "upgrade",       95,  -1 },
+  { "workshop",      94,  -1 },
+  { "armoury",       94,  -1 },
+  { "mine2",         90,  -1 },
+  { "turbine2",      85,  -1 },
+  { "mine",          85,  -1 },
+  { "turbine",       80,  -1 },
+  { "missile2",      80,  -1 },
+  { "missile2inv",   80,  -1 },
+  { "missile",       75,  -1 },
+  { "missileinv",    75,  -1 },
+  { "howitzer",      70,  -1 },
+  { "cannon",        65,  -1 },
+  { "laser",         65,  -1 },
+  { "cannon20mm",    60,  -1 },
+  { "firebeam",      60,  50 },
+  { "battery2",      31,  60 },
+  { "battery",       30,  60 },
+  { "buzzsaw",       50,  -1 },
+  { "rocketemp",     50,  -1 },
+  { "sniper2",       50,  -1 },
+  { "sniper",        50,  -1 },
+  { "minigun2",      50,  -1 },
+  { "minigun",       50,  -1 },
+  { "rocket",        50,  -1 },
+  { "smokebomb",     50,  -1 },
+  { "shotgun",       50,  -1 },
+  { "mortar2",       50,  -1 },
+  { "mortar",        50,  -1 },
+  { "magnabeam",     29,  -1 },
+  { "store",         29,  -1 },
+  { "repairstation", 5,   -1 },
+},
+
+["missile"]     = {
+  { "turbine2",      100, -1 },
+  { "turbine",       100, -1 },
+  { "machinegun",    100, -1 },
+  { "flak",          100, -1 },
+  { "barrel",        100, -1 },
+  { "shotgun",       100, -1 },
+  { "munitions",     95,  -1 },
+  { "factory",       95,  -1 },
+  { "upgrade",       95,  -1 },
+  { "workshop",      94,  -1 },
+  { "armoury",       94,  -1 },
+  { "missile2",      90,  -1 },
+  { "missile2inv",   90,  -1 },
+  { "mine2",         90,  -1 },
+  { "mine",          85,  -1 },
+  { "missile",       75,  -1 },
+  { "missileinv",    75,  -1 },
+  { "howitzer",      70,  -1 },
+  { "cannon",        65,  -1 },
+  { "laser",         65,  -1 },
+  { "battery2",      62,  -1 },
+  { "battery",       61,  -1 },
+  { "cannon20mm",    60,  -1 },
+  { "firebeam",      60,  -1 },
+  { "magnabeam",     60,  -1 },
+  { "buzzsaw",       50,  -1 },
+  { "rocketemp",     50,  -1 },
+  { "sniper2",       50,  -1 },
+  { "sniper",        50,  -1 },
+  { "minigun2",      50,  -1 },
+  { "minigun",       50,  -1 },
+  { "rocket",        50,  -1 },
+  { "smokebomb",     50,  -1 },
+  { "mortar2",       50,  -1 },
+  { "mortar",        50,  -1 },
+  { "store",         29,  -1 },
+  { "repairstation", 5,   -1 },
+},
+
+["missileinv"]  = {
+  { "turbine2",      100, -1 },
+  { "turbine",       100, -1 },
+  { "machinegun",    100, -1 },
+  { "flak",          100, -1 },
+  { "barrel",        100, -1 },
+  { "shotgun",       100, -1 },
+  { "munitions",     95,  -1 },
+  { "factory",       95,  -1 },
+  { "upgrade",       95,  -1 },
+  { "workshop",      94,  -1 },
+  { "armoury",       94,  -1 },
+  { "missile2",      90,  -1 },
+  { "missile2inv",   90,  -1 },
+  { "mine2",         90,  -1 },
+  { "mine",          85,  -1 },
+  { "missile",       75,  -1 },
+  { "missileinv",    75,  -1 },
+  { "howitzer",      70,  -1 },
+  { "cannon",        65,  -1 },
+  { "laser",         65,  -1 },
+  { "battery2",      62,  -1 },
+  { "battery",       61,  -1 },
+  { "cannon20mm",    60,  -1 },
+  { "firebeam",      60,  -1 },
+  { "magnabeam",     60,  -1 },
+  { "buzzsaw",       50,  -1 },
+  { "rocketemp",     50,  -1 },
+  { "sniper2",       50,  -1 },
+  { "sniper",        50,  -1 },
+  { "minigun2",      50,  -1 },
+  { "minigun",       50,  -1 },
+  { "rocket",        50,  -1 },
+  { "smokebomb",     50,  -1 },
+  { "mortar2",       50,  -1 },
+  { "mortar",        50,  -1 },
+  { "store",         29,  -1 },
+  { "repairstation", 5,   -1 },
+},
+
+["missile2"]    = {
+  { "barrel",     0,   100 }, -- will most definitely be sniped
+  { "howitzer",   100, 96 },
+  { "cannon",     95,  95 },
+  { "laser",      15,  95 }, -- will be taken out by snipers etc. before nuke arrives, thus low direct fire prob
+  { "cannon20mm", 15,  90 },
+  { "firebeam",   15,  90 },
+  { "rocket",     0,   60 },
+  { "smokebomb",  0,   60 },
+  { "buzzsaw",    0,   50 },
+  { "rocketemp",  0,   50 },
+  { "magnabeam",  10,  50 },
+  { "sniper2",    0,   50 },
+  { "sniper",     0,   50 },
+  { "minigun2",   0,   50 },
+  { "minigun",    0,   50 },
+  { "mortar2",    0,   50 },
+  { "mortar",     0,   50 },
+  { "shotgun",    0,   50 },
+  { "machinegun", 0,   40 },
+  { "flak",       0,   40 },
+  { "turbine2",   5,   20 },
+},
+
+["missile2inv"] = {
+  { "barrel",     0,   100 }, -- will most definitely be sniped
+  { "howitzer",   100, 96 },
+  { "cannon",     95,  95 },
+  { "laser",      15,  95 }, -- will be taken out by snipers etc. before nuke arrives, thus low direct fire prob
+  { "cannon20mm", 15,  90 },
+  { "firebeam",   15,  90 },
+  { "rocket",     0,   60 },
+  { "smokebomb",  0,   60 },
+  { "buzzsaw",    0,   50 },
+  { "rocketemp",  0,   50 },
+  { "magnabeam",  10,  50 },
+  { "sniper2",    0,   50 },
+  { "sniper",     0,   50 },
+  { "minigun2",   0,   50 },
+  { "minigun",    0,   50 },
+  { "mortar2",    0,   50 },
+  { "mortar",     0,   50 },
+  { "shotgun",    0,   50 },
+  { "machinegun", 0,   40 },
+  { "flak",       0,   40 },
+  { "turbine2",   5,   20 },
+},
+
+["cannon"]      = {
+  { "howitzer",      100, 60 },
+  { "cannon",        100, 50 },
+  { "laser",         100, 50 },
+  { "missile2",      95,  -1 },
+  { "missile2inv",   95,  -1 },
+  { "missile",       93,  -1 },
+  { "missileinv",    93,  -1 },
+  { "munitions",     92,  15 },
+  { "factory",       92,  15 },
+  { "upgrade",       92,  -1 },
+  { "workshop",      91,  -1 },
+  { "armoury",       91,  -1 },
+  { "cannon20mm",    90,  30 },
+  { "firebeam",      80,  35 },
+  { "magnabeam",     80,  10 },
+  { "barrel",        30,  80, },
+  { "battery2",      76,  50 },
+  { "battery",       75,  50 },
+  { "mine2",         71,  -1 },
+  { "mortar2",       71,  50 },
+  { "mortar",        70,  50 },
+  { "mine",          70,  -1 },
+  { "turbine2",      59,  20 },
+  { "turbine",       58,  -1 },
+  { "rocketemp",     55,  50 },
+  { "store",         55,  -1 },
+  { "rocket",        50,  25 },
+  { "smokebomb",     50,  -1 },
+  { "shotgun",       20,  15 },
+  { "buzzsaw",       15,  -1 },
+  { "minigun2",      4,   20, },
+  { "minigun",       4,   20, },
+  { "sniper2",       4,   15 },
+  { "flak",          3,   15 },
+  { "sniper",        2,   10 },
+  { "repairstation", 1,   -1 },
+  { "machinegun",    -1,  -1 }, -- never fire cannon at machine gun
+},
+
+["laser"]       = {
+  { "howitzer",      100, -1, },
+  { "cannon",        100, -1, },
+  { "laser",         100, -1, },
+  { "missile2",      95,  -1, },
+  { "missile2inv",   95,  -1, },
+  { "missile",       93,  -1, },
+  { "missileinv",    93,  -1, },
+  { "munitions",     92,  -1, },
+  { "factory",       92,  -1, },
+  { "upgrade",       92,  -1, },
+  { "workshop",      91,  -1, },
+  { "armoury",       91,  -1, },
+  { "cannon20mm",    90,  -1, },
+  { "firebeam",      80,  -1, },
+  { "magnabeam",     80,  -1, },
+  { "battery2",      76,  -1, },
+  { "battery",       75,  -1, },
+  { "mine2",         71,  -1, },
+  { "mortar2",       71,  -1, },
+  { "mortar",        70,  -1, },
+  { "mine",          70,  -1, },
+  { "turbine2",      69,  -1, },
+  { "turbine",       68,  -1, },
+  { "rocketemp",     65,  -1, },
+  { "store",         65,  -1, },
+  { "rocket",        60,  -1, },
+  { "buzzsaw",       60,  -1, },
+  { "sniper2",       55,  -1, },
+  { "minigun2",      50,  -1, },
+  { "minigun",       50,  -1, },
+  { "smokebomb",     50,  -1, },
+  { "shotgun",       50,  -1, },
+  { "barrel",        40,  -1, },
+  { "flak",          30,  -1, },
+  { "sniper",        20,  -1, },
+  { "repairstation", 20,  -1, },
+  { "machinegun",    -1,  -1 }, -- never fire a laser at a machine gun
+},
+
+["flak"]        = {
+  { "mortar2",    3, -1 },
+  { "mortar",     2, -1 },
+  { "machinegun", 1, -1 },
+},
+
+["shotgun"]     = {
+  { "machinegun",  70, -1 },
+  { "rocketemp",   70, -1 },
+  { "rocket",      70, -1 },
+  { "firebeam",    70, -1 },
+  { "battery2",    66, -1 },
+  { "battery",     65, -1 },
+  { "barrel",      65, -1 },
+  { "munitions",   64, -1 },
+  { "factory",     64, -1 },
+  { "upgrade",     64, -1 },
+  { "workshop",    63, -1 },
+  { "armoury",     63, -1 },
+  { "turbine2",    63, -1 },
+  { "mortar2",     63, -1 },
+  { "minigun2",    62, -1 },
+  { "minigun",     62, -1 },
+  { "mortar",      60, -1 },
+  { "turbine",     60, -1 },
+  { "howitzer",    60, -1 },
+  { "cannon20mm",  55, -1 },
+  { "missile2",    55, -1 },
+  { "missile2inv", 55, -1 },
+  { "missile",     50, -1 },
+  { "missileinv",  50, -1 },
+},
+
+["rocketemp"]   = {
+  { "reactor",     101, 80 },
+  { "missile2",    60,  100 },
+  { "missile2inv", 60,  100 },
+  { "howitzer",    35,  100 },
+  { "cannon",      35,  100 },
+  { "laser",       40,  100 },
+  { "missile",     50,  80 },
+  { "missileinv",  50,  80 },
+  { "firebeam",    40,  70 },
+  { "cannon20mm",  40,  70 },
+  { "turbine2",    70,  60 },
+  { "turbine",     70,  60 },
+  { "munitions",   64,  70 },
+  { "factory",     64,  70 },
+  { "battery2",    66,  60 },
+  { "battery",     65,  60 },
+  { "barrel",      65,  30 },
+  { "upgrade",     64,  65 },
+  { "workshop",    63,  60 },
+  { "armoury",     63,  60 },
+  { "rocketemp",   40,  60 },
+  { "rocket",      40,  60 },
+  { "mine",        25,  50 },
+  { "mine2",       25,  50 },
+  { "machinegun",  25,  5 },
+  { "magnabeam",   10,  5 },
+},
+
+["rocket"]      = {
+  { "howitzer",    45, 100 },
+  { "cannon",      50, 100 },
+  { "laser",       55, 100 },
+  { "firebeam",    50, 75 },
+  { "cannon20mm",  50, 75 },
+  { "turbine2",    75, 50 },
+  { "turbine",     70, 50 },
+  { "battery2",    66, 50 },
+  { "battery",     65, 50 },
+  { "barrel",      65, 60 },
+  { "rocketemp",   60, 60 },
+  { "rocket",      60, 60 },
+  { "munitions",   60, 40 },
+  { "factory",     60, 40 },
+  { "buzzsaw",     55, 50 },
+  { "minigun2",    50, 50 },
+  { "minigun",     50, 50 },
+  { "upgrade",     21, 20 },
+  { "workshop",    21, 20 },
+  { "armoury",     21, 20 },
+  { "flak",        21, 60 },
+  { "shotgun",     21, 55 },
+  { "smokebomb",   21, 30 },
+  { "machinegun",  0,  20 },
+  { "missile2",    15, 0 },
+  { "missile2inv", 15, 0 },
+  { "missile",     15, 0 },
+  { "missileinv",  15, 0 },
+  { "mine",        10, 15 },
+  { "mine2",       10, 15 },
+  { "magnabeam",   2,  10 },
+},
+
+["firebeam"]    = {
+  { "laser",         100, 80 },
+  { "firebeam",      100, 80 },
+  { "cannon20mm",    95,  80 },
+  { "cannon",        90,  50 },
+  { "barrel",        90,  80, },
+  { "battery2",      76,  60 },
+  { "battery",       75,  60 },
+  { "mortar2",       71,  60 },
+  { "mortar",        70,  50 },
+  { "rocketemp",     65,  70 },
+  { "rocket",        60,  70 },
+  { "turbine2",      69,  60 },
+  { "turbine",       68,  -1 },
+  { "smokebomb",     60,  -1 },
+  { "buzzsaw",       60,  -1 },
+  { "minigun2",      50,  20, },
+  { "minigun",       50,  20, },
+  { "sniper2",       50,  15 },
+  { "shotgun",       40,  15 },
+  { "flak",          35,  15 },
+  { "howitzer",      35,  35 },
+  { "sniper",        25,  30 },
+  { "mine2",         23,  -1 },
+  { "munitions",     22,  15 },
+  { "factory",       22,  15 },
+  { "upgrade",       21,  -1 },
+  { "workshop",      20,  -1 },
+  { "armoury",       20,  -1 },
+  { "mine",          20,  -1 },
+  { "store",         11,  -1 },
+  { "repairstation", 10,  0 },
+  { "machinegun",    10,  10 },
+  { "missile2",      1,   -1 },
+  { "missile2inv",   1,   -1 },
+  { "missile",       1,   -1 },
+  { "missileinv",    1,   -1 },
+},
+
+["cannon20mm"]  = {
+  { "battery2",    66, 25 },
+  { "battery",     65, 25 },
+  { "barrel",      65, 60 },
+  { "machinegun",  60, 10 },
+  { "laser",       55, 70 },
+  { "cannon20mm",  55, 20 },
+  { "rocketemp",   55, 10 },
+  { "rocket",      55, 10 },
+  { "cannon",      55, 10 },
+  { "missile2",    55, 5 },
+  { "missile2inv", 55, 5 },
+  { "missile",     50, 5 },
+  { "missileinv",  50, 5 },
+  { "turbine2",    50, 20 },
+  { "turbine",     45, -1 },
+  { "munitions",   45, -1 },
+  { "factory",     45, -1 },
+  { "upgrade",     45, -1 },
+  { "workshop",    45, -1 },
+  { "armoury",     45, -1 },
+  { "firebeam",    30, 10 },
+  { "store",       5,  -1 },
+},
+
+["buzzsaw"]     = {
+  { "reactor",     140, 200 },
+  { "barrel",      80,  195 },
+  { "battery2",    76,  195 },
+  { "battery",     75,  195 },
+  { "munitions",   30,  170 },
+  { "factory",     30,  170 },
+  { "upgrade",     20,  150 },
+  { "workshop",    20,  150 },
+  { "armoury",     20,  150 },
+  { "howitzer",    70,  100 },
+  { "cannon",      60,  100 },
+  { "laser",       70,  100 },
+  { "store",       50,  90 },
+  { "rocket",      45,  90 },
+  { "rocketemp",   65,  90 },
+  { "cannon20mm",  90,  30 },
+  { "mortar2",     60,  90 },
+  { "missile2",    50,  85 },
+  { "missile2inv", 50,  85 },
+  { "firebeam",    80,  85 },
+  { "shotgun",     50,  85 },
+  { "missile",     50,  80 },
+  { "missileinv",  50,  80 },
+  { "mortar",      50,  80 },
+  { "mine2",       40,  75 },
+  { "mine",        40,  75 },
+  { "smokebomb",   40,  65 },
+  { "minigun2",    40,  65, },
+  { "minigun",     40,  65, },
+  { "buzzsaw",     30,  65 },
+  { "flak",        25,  60 },
+  { "sniper2",     25,  60 },
+  { "machinegun",  20,  50 },
+  { "sniper",      15,  30 },
+  { "turbine2",    30,  -1 },
+  { "turbine",     25,  -1 },
+  { "magnabeam",   -1,  -1 }, -- ignore magnabeam :(
+},
+
+["howitzer"]    = {
+  { "barrel",      30, 100 },
+  { "cannon",      20, 100 },
+  { "laser",       25, 100 },
+  { "cannon20mm",  10, 95 },
+  { "firebeam",    10, 95 },
+  { "mine2",       0,  90 },
+  { "mine",        0,  90 },
+  { "missile2",    0,  90 },
+  { "missile2inv", 0,  90 },
+  { "missile",     0,  90 },
+  { "missileinv",  0,  90 },
+  { "howitzer",    20, 85 },
+  { "battery2",    51, 10 },
+  { "battery",     50, 10 },
+  { "factory",     50, 10 },
+  { "munitions",   50, 10 },
+  { "magnabeam",   30, 10 },
+  { "smokebomb",   10, 40 }, -- Other wepons will have too easy of a time shooting this down, don't prioritize them
+},
+["magnabeam"]   = {
+  { "reactor", 1, -1 },
+},
+["smokebomb"]   = {
+  { "machinegun", 1, 100 },
+  { "flak",       1, 100 },
+  { "reactor",    2, 30 },
+}
 }
 -- The core is targeted first,
 -- must be ordered by priority (max(direct, splash)), descending
