@@ -1,3 +1,5 @@
+dofile(path .. "/PhysLibAPI/PhysLib.lua")       -- Adds the API functions
+
 --- forts API ---
 function LogTables(Table, IndentLevel)
    if Table == nil then
@@ -1440,7 +1442,7 @@ data.StructureHPList = { bracing = 150, backbracing = 100, armour = 400, door = 
 -- custom RAY_HIT return types:
 data.RAY_HIT_OBSTRUCTED = 69420
 
-ShowObstructionRays = false
+ShowObstructionRays = true
 -- This is for canAfford, therefor lasers will be able to fire a bit before they are full
 WeaponFireCosts =
 {
@@ -1526,17 +1528,9 @@ function LogHighest(x)
    BetterLog(x)
 end
 
-PhysLibRV = nil
-
 function Load(gameStart)
    GameStarted = true
-
-   Log(ExecuteInScript)
-   Log(CallScript)
-
-   CallScript("script.lua", -1, "StructureRayCast", { Id = teamId, PosA = Vec3(0, 0, 0), PosB = Vec3(1000, 0, 1000) }, nil)
-   Log("Returned from call, logging value...")
-   BetterLog(PhysLibRV)
+   PhysLib:Load("CronkUltraHardAI" .. teamId)
 
    if teamId % MAX_SIDES == 1 then
       enemyTeamId = 2
@@ -2067,8 +2061,7 @@ function FindPriorityTarget(type, weaponId, hitpoints, needLineOfSight, needLine
          -- dmgDealt is 100% - HP left of target after hitting (only relevant when splash damage is dealt)
 
          --LogLower("Checking target " .. targetType .. " " .. targetId)
-         local targetObstructed, dmgDealt = IsTargetObstructed(weaponId, type, targetPos, hitpoints, needLineOfSight,
-            needLineToStructure, targetId, damageMulti)
+         local targetObstructed, dmgDealt = IsTargetObstructed(weaponId, type, targetPos, hitpoints, targetId, damageMulti)
          --LogLower("Obstructed: " .. tostring(targetObstructed) .. " dmgDealt: " .. tostring(dmgDealt))
 
          if not targetObstructed then
@@ -2113,11 +2106,11 @@ function FindPriorityTarget(type, weaponId, hitpoints, needLineOfSight, needLine
 end
 
 -- returns:
--- boolean isTargetObstructed (If true, the other 2 return values might be undefined)
--- boolean splashRequired to hit
--- float dmgDealt if splashRequired (formula: 1 - distanceToTarget/SplashRadius)
-function IsTargetObstructed(weaponId, weaponType, pos, hitpoints, needLineOfSight, needLineToStructure, targetId,
-                            damageMulti)
+-- boolean isTargetObstructed
+-- float dmgDealt if we cannot directly hit the target (formula: 1 - distanceToTarget/SplashRadius)
+-- dmgDealt is false on direct hit or if target is obstructed
+
+function IsTargetObstructed(weaponId, weaponType, pos, hitpoints, targetId, damageMulti)
    --Log("weaponId: " .. weaponId .. ", weaponType: " .. weaponType .. ", line of sight: " .. tostring(needLineOfSight) .. ", line to structure: " .. tostring(needLineToStructure))
    if pos.x == 0 and pos.y == 0 then return true, false end
    if weaponType == "missile" or weaponType == "missileinv" or weaponType == "missile2" or weaponType == "missile2inv" then
@@ -2161,12 +2154,13 @@ function IsTargetObstructed(weaponId, weaponType, pos, hitpoints, needLineOfSigh
    --SpawnLine(hardPointPos, aimDirection, Blue(255), 5)
 
    -- check if next 30 tiles in that direction are clear
-   if ShowObstructionRays then rayFlags = rayFlags | RAY_DEBUG end
-   local hitType = CastTargetObstructionRayNew(hardPointPos, aimDirection, math.huge, rayFlags, weaponType, targetId,
-      weaponId)
+   if ShowObstructionRays then
+      SpawnLine(hardPointPos, aimDirection, Colour(255, 0, 0, 255), 5)
+   end
 
-   if hitType == data.RAY_HIT_OBSTRUCTED or hitType == RAY_HIT_TERRAIN then
-      LogLower("firing direction obstructed")
+   local canHitTarget = CastTargetObstructionRayNew(hardPointPos, aimDirection, math.huge, weaponType, targetId, weaponId)
+
+   if not canHitTarget then
       return true, false
    end
    -- else, can actually fire there
@@ -2179,7 +2173,7 @@ function IsTargetObstructed(weaponId, weaponType, pos, hitpoints, needLineOfSigh
    local vx = v * math.cos(angle)
    local vy = v * math.sin(angle)
    local dx = pos.x - hardPointPos.x
-   local dy = hardPointPos.y - pos.y
+   --local dy = hardPointPos.y - pos.y
    local g = data.Gravity[weaponType] or 981
 
    local time = dx / vx
@@ -2192,12 +2186,15 @@ function IsTargetObstructed(weaponId, weaponType, pos, hitpoints, needLineOfSigh
    local testPos = Vec3()
    testPos.x = pos.x - fac * vx
    testPos.y = pos.y + fac * vy2
-   --if ShowObstructionRays then SpawnLine(pos, testPos, Colour(0, 255, 0, 255), 5) end
-   -- has line of sight
+   if ShowObstructionRays then
+      SpawnLine(testPos, pos, Colour(255, 0, 0, 255), 5)
+   end
    -- shoot ray from artificial pos to target pos to check if projectile has enough hp/splash
-   local hitType, dmgDealt = CastTargetObstructionRayNew(testPos, pos, hitpoints, rayFlags, weaponType, targetId,
-      weaponId, damageMulti)
-   if hitType == data.RAY_HIT_OBSTRUCTED or hitType == RAY_HIT_TERRAIN then return true, false end
+   local canHitTarget, dmgDealt = CastTargetObstructionRayNew(testPos, pos, hitpoints, weaponType, targetId, weaponId, damageMulti)
+
+   if not canHitTarget then
+      return true, false
+   end
 
    return false, dmgDealt
 end
@@ -2206,12 +2203,125 @@ function comparePositions(pos1, pos2)
    return (pos1.x == pos2.x and pos1.y == pos2.y)
 end
 
+-- returns boolean canHitTarget, float dmgDealt by splash damage if not a direct hit
+function CastTargetObstructionRayNew(sourcePos, targetPos, hitpoints, weaponType, targetId, weaponId, damageMulti)
+   local damageMulti = damageMulti or { direct = 1, splash = 1 }
+   local projectileHP = hitpoints * damageMulti.direct or hitpoints
+
+   -- first check if we collide with terrain
+
+   if CastGroundRay(sourcePos, targetPos, TERRAIN_BACKGROUND) == RAY_HIT_TERRAIN then
+      SpawnCircle(GetRayHitPosition(), 50, Colour(0, 0, 255, 255), 5)
+      return false, false
+   end
+
+   -- path clear, check obstructing structures and see if projectile can penetrate them
+   local result = PhysLib:StructureRayCast(sourcePos, targetPos) or {}
+   if #result == 0 then
+      -- no structures in the way, can hit target directly
+      return true, false
+   end
+
+   for _, hit in pairs(result) do
+      local hitType = RAY_HIT_STRUCTURE
+
+      if hitType == RAY_HIT_DEVICE then
+         -- outdated, need to adapt to PhysLib when it supports devices
+         local deviceId = GetRayHitDeviceId()
+         if deviceId ~= weaponId and GetDeviceTeamId(deviceId) % MAX_SIDES == teamId % MAX_SIDES then
+            -- hitting friendly device
+            return data.RAY_HIT_OBSTRUCTED, 0
+         end
+         if deviceId ~= targetId and deviceId ~= weaponId and not (weaponType == "minigun" and GetDeviceType(deviceId) == "sandbags") then
+            --LogLower("Ray hit " .. GetDeviceType(deviceId))
+            projectileHP = projectileHP - GetDeviceHitpoints(deviceId)
+         end
+         continue
+      end
+
+      local teamHit = NodeTeam(hit.nodeA.id)
+      local hitSaveName = hit.link.material
+      local hittingSelf = teamHit == teamId
+      local hittingOwnTeam = teamHit % MAX_SIDES == teamId % MAX_SIDES
+
+      if hittingSelf and hitSaveName == "door" then
+         -- ignore friendly doors
+         continue
+      end
+
+      if not data.HitsBackground[weaponType] or hittingOwnTeam then
+         -- ignore background hits if weapon doesn't collide with it
+         -- or in case weapon does collide with it, ignore friendly hits
+         if hitSaveName == "backbracing" or hitSaveName == "rope" then
+            continue
+         end
+      end
+
+      if (hittingOwnTeam) then
+         -- hitting friendly structure, terminate checks, return false
+         return false, false
+      end
+
+      if not data.StructureHPList[hitSaveName] then
+         -- unknown material, skip
+         continue
+      end
+      
+      local nodeIdA = hit.nodeA.id
+      local nodeIdB = hit.nodeB.id
+
+      if data.MetalExclusions[weaponType] then
+         if (hitSaveName == "armour" or (hitSaveName == "door" and data.OpenDoors[nodeIdA .. " " .. nodeIdB] ~= true)) then
+            -- weapon doesn't damage metal, terminate checks, return false
+            -- unless we're hitting an open door
+            return false, false
+         end
+      end
+
+      if hitSaveName == "shield" and data.ShieldExclusions[weaponType] then
+         return false, false
+      end
+
+      if (nodeIdA > 0 and nodeIdB > 0) then
+         -- don't reduce HP if we're hitting an open door
+         if data.OpenDoors[nodeIdA .. " " .. nodeIdB] ~= true then
+            -- GetLinkHealth is the percentage of HP left
+            projectileHP = projectileHP - GetLinkHealth(nodeIdA, nodeIdB) * data.StructureHPList[hitSaveName]
+         end
+      else
+         -- node ids not received for whatever reason, assume full material hp
+         projectileHP = projectileHP - data.StructureHPList[hitSaveName]
+      end
+
+      if (projectileHP < 0) then
+         -- projectile expired
+         -- cannot hit target directly, calculate estimate for splash damage if weapon deals splash
+         local lastHitPos = Vec3LerpNum(hit.nodeA, hit.nodeB, hit.linkT)
+         if data.ProjectileSplash[weaponType] then
+            local distance = Vec3Length(targetPos - lastHitPos)
+            if ShowObstructionRays then SpawnCircle(lastHitPos, data.ProjectileSplash[weaponType], Red(92), 3) end
+            local dmgDealt = 1 - distance / (data.ProjectileSplash[weaponType] * damageMulti.direct or data.ProjectileSplash[weaponType] * damageMulti.splash or data.ProjectileSplash[weaponType])
+            if dmgDealt > 0 then return false, dmgDealt end
+         end
+
+         return false, false
+      end
+   end
+
+   return true, false
+end
+
+-- calculate hit position given nodeA, nodeB and LinkT
+function Vec3LerpNum(a, b, t)
+   return {a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t}
+end
+
 -- custom function by @cronkhinator for TargetObstruction check
 -- returns:
 -- hitType of ray
 -- boolean splashRequired
 -- float dmgDealt if splashRequired (formula: 1 - distanceToTarget/SplashRadius)
-function CastTargetObstructionRayNew(source, target, hitpoints, rayFlags, weaponType, targetId, weaponId, damageMulti)
+function CastTargetObstructionRayOld(source, target, hitpoints, rayFlags, weaponType, targetId, weaponId, damageMulti)
    local damageMulti = damageMulti or { direct = 1, splash = 1 }
    local hitType
    local hitSaveName

@@ -3,6 +3,7 @@ dofile("ui/uihelper.lua")
 dofile(path .. "/PhysLibAPI/PhysLib.lua")       -- Adds the API functions
 
 function Load()
+  Log("script.lua load")
   PhysLib:Load("CronkUltraHardAI")
 end
 

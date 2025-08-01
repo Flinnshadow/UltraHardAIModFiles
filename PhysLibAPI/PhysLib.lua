@@ -4,16 +4,19 @@ function ExtractSteamId(str)
     return str:match("([^/]+)$")
 end
 
+
+-- DO NOT EDIT! DO NOT EDIT!
 PhysLib = {
-    --Path = "mods/physlib/script.lua",
-    Path = "mods/3386439236",
-    callbackPath = "'mods/" .. ExtractSteamId(path) .. "/script.lua'",
-    Version = 1.2,
+    Path = "mods/physlib/script.lua",
+    --Path = "mods/3386439236",
+    callbackPath = "mods/" .. ExtractSteamId(path) .. "/script.lua",
+    Version = 1.3,
 
 
     -- concats to "apiFunction(thisScriptPath, additionalArg, additionalArg)"
-    callTable = {"PhysLib.API:", "apiFunction", "(thisScriptPath, ", "additionalArg, additionalArg,", ")"},
+    callTable = {"API:", "apiFunction", "(thisScriptPath, ", "additionalArg, additionalArg,", ")"},
     
+    apiClass = "API:",
 
     ModName = "Undefined mod name, please parse in PhysLib:Load()",
 }
@@ -30,6 +33,13 @@ function PhysLib:Parse(APIFunc, ...)
     callTable[4] = table.concat({...}, ", ")
     local scriptCall = table.concat(callTable)
     ExecuteInScript(path, -1, scriptCall)
+end
+
+
+function PhysLib:Call(APIFunc, ...) 
+    local scriptCall = self.apiClass .. APIFunc
+    local args = {...}
+    return CallScript(self.Path, -1, scriptCall, args, nil)
 end
 
 
@@ -65,8 +75,8 @@ function PhysLib:Load(modName)
     PhysLib.callTable[3] = "(" .. self:CleanPath(PhysLib.callbackPath) .. ", "
     modName = modName or self.ModName
     self.ModName = modName
-    self:Parse("ValidateVersion", self:MakeNestedString(modName))
-    local apiVersion = self.RV
+    local apiVersion = self:Call("RegisterMod", modName)
+    
     if apiVersion == nil then
         Log("Error: PhysLibAPI: PhysLib not detected! Make sure you require the PhysLib mod in your mod.lua file")
     end
@@ -87,9 +97,7 @@ end
 
 -- #region event subscriber
 function PhysLib:SubscribeToEvent(apiFunction, localFunction)
-    apiFunction = self:MakeNestedString(apiFunction)
-    localFunction = self:MakeNestedString(localFunction)
-    self:Parse("SubscribeToEvent", apiFunction, localFunction)
+    return self:Call("SubscribeToEvent", self.callbackPath, apiFunction, localFunction)
 end
 -- #endregion
 -- #region API
@@ -114,80 +122,62 @@ function PhysLib:RegisterPhysicsObject(pos, radius, velocity, objectDefinitionSa
     velocity = velocity or Vec3(0, 0, 0)
     objectDefinitionSaveName = objectDefinitionSaveName or ""
 
-    pos = self:StringifyTable(pos)
-    velocity = self:StringifyTable(velocity)
-    objectDefinitionSaveName = self:MakeNestedString(objectDefinitionSaveName)
-    effectPath = self:MakeNestedString(self:MakeBackSlashesForwardSlashes(effectPath))
-    self:Parse("RegisterPhysicsObject", pos, radius, velocity, objectDefinitionSaveName, effectPath)
-    return self.RV
+    --self:Parse("RegisterPhysicsObject", pos, radius, velocity, objectDefinitionSaveName, effectPath)
+    return self:Call("RegisterPhysicsObject", pos, radius, velocity, objectDefinitionSaveName, effectPath)
+    --return self.RV
 end
 
 function PhysLib:UnregisterPhysicsObject(objectId)
-    self:Parse("UnregisterPhysicsObject", objectId)
-    return self.RV
+    return self:Call("UnregisterPhysicsObject", objectId)
 end
 
 function PhysLib:GetObject(objectId)
-    self:Parse("GetObject", objectId)
-    return self.RV
+    return self:Call("GetObject", objectId)
 end
 
 function PhysLib:GetObjectPosition(objectId)
-    self:Parse("GetObjectPosition", objectId)
-    return self.RV
+    return self:Call("GetObjectPosition", objectId)
 end
 
 function PhysLib:SetObjectPosition(objectId, pos)
     pos = self:StringifyTable(pos)
-    self:Parse("SetObjectPosition", objectId, pos)
-    return self.RV
+    return self:Call("SetObjectPosition", objectId, pos)
 end
 
 function PhysLib:GetObjectVelocity(objectId)
-    self:Parse("GetObjectVelocity", objectId)
-    return self.RV
+    return self:Call("GetObjectVelocity", objectId)
 end
 
 function PhysLib:SetObjectVelocity(objectId, velocity)
     velocity = self:StringifyTable(velocity)
-    self:Parse("SetObjectVelocity", objectId, velocity)
-    return self.RV
+    return self:Call("SetObjectVelocity", objectId, velocity)
 end
 
 function PhysLib:GetObjectRadius(objectId)
-    self:Parse("GetObjectRadius", objectId)
-    return self.RV
+    return self:Call("GetObjectRadius", objectId)
 end
 
 function PhysLib:SetObjectRadius(objectId, radius)
-    self:Parse("SetObjectRadius", objectId, radius)
-    return self.RV
+    return self:Call("SetObjectRadius", objectId, radius)
 end
 
 function PhysLib:GetObjectsObjectDefinitionSaveName(objectId)
-    self:Parse("GetObjectDefinitionSaveName", objectId)
-    return self.RV
+    return self:Call("GetObjectDefinitionSaveName", objectId)
 end
 function PhysLib:GetObjectsObjectDefinition(objectId)
-    self:Parse("GetObjectDefinition", objectId)
-    return self.RV
+    return self:Call("GetObjectDefinition", objectId)
 end
 
 function PhysLib:SetObjectsObjectDefinition(objectId, objectDefinitionSaveName)
-    objectDefinitionSaveName = self:MakeNestedString(objectDefinitionSaveName)
-    self:Parse("SetObjectDefinition", objectId, objectDefinitionSaveName)
-    return self.RV
+    return self:Call("SetObjectDefinition", objectId, objectDefinitionSaveName)
 end
 
 function PhysLib:TerrainCircleCollision(posx, posy, radius)
-    self:Parse("TerrainCircleCollision", posx, posy, radius)
-    return self.RV
+    return self:Call("TerrainCircleCollision", posx, posy, radius)
 end
 
 function PhysLib:StructureRayCast(posA, posB)
-    posA = self:StringifyTable(posA)
-    posB = self:StringifyTable(posB)
-    self:Parse("StructureRayCast", posA, posB)
+    return self:Call("StructureRayCast", posA, posB)
 end
 --#endregion
 --#region physics object definition
@@ -197,30 +187,21 @@ function PhysLib:RegisterObjectDefinition(objectDefinitionSaveName, objectDefini
         return
     end
     objectDefinition = objectDefinition or defaultObjectDefinition
-
-
-    objectDefinitionSaveName = self:MakeNestedString(objectDefinitionSaveName)
-    objectDefinition = self:StringifyTable(objectDefinition)
-    self:Parse("RegisterObjectDefinition", objectDefinitionSaveName, objectDefinition)
-    return self.RV
+    return self:Call("RegisterObjectDefinition", objectDefinitionSaveName, objectDefinition)
 end
 
 function PhysLib:GetObjectDefinition(objectDefinitionSaveName)
     if objectDefinitionSaveName == nil or objectDefinitionSaveName == "" then
         return
     end
-    objectDefinitionSaveName = self:MakeNestedString(objectDefinitionSaveName)
-    self:Parse("GetObjectDefinition", objectDefinitionSaveName)
-    return self.RV
+    return self:Call("GetObjectDefinition", objectDefinitionSaveName)
 end
 
 function PhysLib:UnregisterObjectDefinition(objectDefinitionSaveName)
     if objectDefinitionSaveName == nil or objectDefinitionSaveName == "" then
         return
     end
-    objectDefinitionSaveName = self:MakeNestedString(objectDefinitionSaveName)
-    self:Parse("UnregisterObjectDefinition", objectDefinitionSaveName)
-    return self.RV
+    return self:Call("UnregisterObjectDefinition", objectDefinitionSaveName)
 end
 --#endregion
 --#region link definition
@@ -234,18 +215,14 @@ function PhysLib:GetLinkDefinition(linkDefinitionSaveName)
     if linkDefinitionSaveName == nil or linkDefinitionSaveName == "" then
         return
     end
-    linkDefinitionSaveName = self:MakeNestedString(linkDefinitionSaveName)
-    self:Parse("GetLinkDefinition", linkDefinitionSaveName)
-    return self.RV
+    return self:Call("GetLinkDefinition", linkDefinitionSaveName)
 end
 
 function PhysLib:UnregisterLinkDefinition(linkDefinitionSaveName)
     if linkDefinitionSaveName == nil or linkDefinitionSaveName == "" then
         return
     end
-    linkDefinitionSaveName = self:MakeNestedString(linkDefinitionSaveName)
-    self:Parse("UnregisterLinkDefinition", linkDefinitionSaveName)
-    return self.RV
+    return self:Call("UnregisterLinkDefinition", linkDefinitionSaveName)
 end
 --#endregion
 
