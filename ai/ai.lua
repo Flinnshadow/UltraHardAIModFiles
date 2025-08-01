@@ -1526,8 +1526,17 @@ function LogHighest(x)
    BetterLog(x)
 end
 
+PhysLibRV = nil
+
 function Load(gameStart)
    GameStarted = true
+
+   Log(ExecuteInScript)
+   Log(CallScript)
+
+   CallScript("script.lua", -1, "StructureRayCast", { Id = teamId, PosA = Vec3(0, 0, 0), PosB = Vec3(1000, 0, 1000) }, nil)
+   Log("Returned from call, logging value...")
+   BetterLog(PhysLibRV)
 
    if teamId % MAX_SIDES == 1 then
       enemyTeamId = 2

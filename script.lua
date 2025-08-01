@@ -1,5 +1,20 @@
 dofile("scripts/forts.lua")
 dofile("ui/uihelper.lua")
+dofile(path .. "/PhysLibAPI/PhysLib.lua")       -- Adds the API functions
+
+function Load()
+  PhysLib:Load("CronkUltraHardAI")
+end
+
+function StructureRayCast(args)
+  local aiScriptId = args.Id
+  local posA = args.PosA
+  local posB = args.PosB
+  Log("Call received with arguments " .. aiScriptId .. ", " .. posA .. ", " .. posB)
+  PhysLib:StructureRayCast(posA, posB)
+  Log("Called PhysLib API, callback to ai.lua")
+  SetScriptValue("ai/ai.lua", aiScriptId, "PhysLibRV", PhysLib.RV)
+end
 
 data.linkLists = {}
 function DeleteLinks(nodeIdA, nodeIdB, saveName, relativeHealth, stress)
@@ -40,7 +55,7 @@ function DeleteFoundations(teamId)
   end
   
   if not foundFoundation then
-    DeleteEverything(teamId)
+    --DeleteEverything(teamId)
   end
 end
 
